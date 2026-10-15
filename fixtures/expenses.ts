@@ -1,6 +1,7 @@
 import type { APIRequestContext } from '@playwright/test';
 import { test as apiTest, expect } from './api';
 import type { Category, Expense } from '../schemas/expense.schema';
+import { closeDb } from '../tests/db/db.helper';
 
 export type ExpenseInput = {
   title: unknown;
@@ -40,7 +41,19 @@ type ExpenseFixtures = {
   createExpense: (overrides?: Partial<ExpenseInput>, ctx?: APIRequestContext) => Promise<Expense>;
 };
 
-export const test = apiTest.extend<ExpenseFixtures>({
+type WorkerFixtures = {
+  /** Closes the read-only DB pool (tests/db/db.helper.ts) when the worker exits. */
+  dbConnection: void;
+};
+
+export const test = apiTest.extend<ExpenseFixtures, WorkerFixtures>({
+  dbConnection: [
+    async ({}, use) => {
+      await use();
+      await closeDb();
+    },
+    { scope: 'worker', auto: true },
+  ],
   // Depends on both contexts so they are torn down after the cleanup runs.
   cleanup: async ({ apiContext, userApiContext }, use) => {
     const ids: { ctx: APIRequestContext; id: number }[] = [];

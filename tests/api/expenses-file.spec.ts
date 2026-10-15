@@ -19,6 +19,7 @@ import { errorSchema, importErrorSchema, validationErrorSchema } from '../../sch
 import type { Expense } from '../../schemas/expense.schema';
 import { importSuccessSchema } from '../../schemas/expense.schema';
 import { expectSchema } from '../../schemas/validate';
+import { expectExpenseRow, getExpensesByTitles } from '../db/db.helper';
 
 const EXPORT = '/api/expenses/export';
 const IMPORT = '/api/expenses/import';
@@ -149,7 +150,7 @@ test.describe('GET /api/expenses/export', { tag: ['@api', '@file'] }, () => {
 
 test.describe('POST /api/expenses/import', { tag: ['@api', '@file'] }, () => {
   test.describe('valid files', () => {
-    test('returns 201 and creates every row owned by the caller', { tag: '@smoke' }, async ({ apiContext, cleanup }) => {
+    test('returns 201 and creates every row owned by the caller', { tag: ['@smoke', '@db'] }, async ({ apiContext, cleanup }) => {
       const titles = [uniqueTitle('import'), uniqueTitle('import'), uniqueTitle('import')];
       cleanup.trackTitles(apiContext, titles);
       const file = await buildXlsx([
@@ -175,9 +176,14 @@ test.describe('POST /api/expenses/import', { tag: ['@api', '@file'] }, () => {
         ]),
       );
       expect(imported).toHaveLength(3);
+      const rows = await getExpensesByTitles(titles);
+      expect(rows).toHaveLength(3);
+      await expectExpenseRow(rows.find((r) => r.title === titles[0]) ?? null, { title: titles[0], amount: 10.5, category: 'Food', date: '2026-10-01' }, env.adminEmail);
+      await expectExpenseRow(rows.find((r) => r.title === titles[1]) ?? null, { title: titles[1], amount: 200, category: 'Travel', date: '2026-10-02' }, env.adminEmail);
+      await expectExpenseRow(rows.find((r) => r.title === titles[2]) ?? null, { title: titles[2], amount: 7.25, category: 'Other', date: '2026-10-03' }, env.adminEmail);
     });
 
-    test('matches headers case-insensitively and ignores extra export columns', { tag: '@regression' }, async ({ apiContext, cleanup }) => {
+    test('matches headers case-insensitively and ignores extra export columns', { tag: ['@regression', '@db'] }, async ({ apiContext, cleanup }) => {
       const title = uniqueTitle('import');
       cleanup.trackTitles(apiContext, [title]);
       const file = await buildXlsx([
@@ -193,9 +199,14 @@ test.describe('POST /api/expenses/import', { tag: ['@api', '@file'] }, () => {
       const row = list.find((e) => e.title === title);
       expect(row).toMatchObject({ amount: 33.3, category: 'Office', created_by: env.adminEmail });
       expect(row?.id).not.toBe(987654);
+      // The ID and Created By columns are ignored: the caller owns the row, with a new id.
+      const rows = await getExpensesByTitles([title]);
+      expect(rows).toHaveLength(1);
+      await expectExpenseRow(rows[0], { title, amount: 33.3, category: 'Office', date: '2026-10-04' }, env.adminEmail);
+      expect(rows[0].id).not.toBe(987654);
     });
 
-    test('skips blank rows and does not count them', { tag: '@regression' }, async ({ apiContext, cleanup }) => {
+    test('skips blank rows and does not count them', { tag: ['@regression', '@db'] }, async ({ apiContext, cleanup }) => {
       const titles = [uniqueTitle('import'), uniqueTitle('import')];
       cleanup.trackTitles(apiContext, titles);
       const file = await buildXlsx([
@@ -209,18 +220,21 @@ test.describe('POST /api/expenses/import', { tag: ['@api', '@file'] }, () => {
 
       expect(res.status(), await res.text()).toBe(201);
       expect(await res.json()).toEqual({ imported: 2 });
+      const rows = await getExpensesByTitles(titles);
+      expect(rows.map((r) => r.title).sort()).toEqual([...titles].sort());
     });
   });
 
   test.describe('invalid files', { tag: '@regression' }, () => {
-    test('returns 400 with row numbers for invalid rows and imports nothing', async ({ apiContext, cleanup }) => {
-      const validTitle = uniqueTitle('import');
-      cleanup.trackTitles(apiContext, [validTitle]);
+    test('returns 400 with row numbers for invalid rows and imports nothing', { tag: '@db' }, async ({ apiContext, cleanup }) => {
+      const titles = [uniqueTitle('import'), uniqueTitle('import'), uniqueTitle('import')];
+      const validTitle = titles[0];
+      cleanup.trackTitles(apiContext, titles);
       const file = await buildXlsx([
         ['title', 'amount', 'category', 'date'],
-        [validTitle, 10, 'Food', '2026-10-01'],
-        [uniqueTitle('import'), 'abc', 'Food', '2026-10-01'],
-        [uniqueTitle('import'), 5, 'Groceries', '2026-10-01'],
+        [titles[0], 10, 'Food', '2026-10-01'],
+        [titles[1], 'abc', 'Food', '2026-10-01'],
+        [titles[2], 5, 'Groceries', '2026-10-01'],
       ]);
 
       const res = await upload(apiContext, file);
@@ -234,6 +248,8 @@ test.describe('POST /api/expenses/import', { tag: ['@api', '@file'] }, () => {
       ]);
       const list = (await (await apiContext.get('/api/expenses')).json()) as Expense[];
       expect(list.map((e) => e.title)).not.toContain(validTitle);
+      // All-or-nothing: the valid row 2 is not inserted either.
+      expect(await getExpensesByTitles(titles)).toEqual([]);
     });
 
     test('returns 400 naming a missing column on row 1', async ({ apiContext }) => {

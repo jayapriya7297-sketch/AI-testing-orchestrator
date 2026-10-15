@@ -55,7 +55,11 @@ generator/ (LLM test generation), reporting/, CI (GitHub Actions, Jenkins, n8n).
   createExpense + cleanup (auto-delete) and validExpense/uniqueTitle; fixtures/files/: upload files
 - schemas/: ajv schemas (auth, expense, error) and expectSchema() in schemas/validate.ts
 - docs/bugs-found.md: app bugs found by tests (BUG-nnn); pinned with test.fail() in the specs
-- Skills in .claude/skills/: /write-api-tests (API tests for an endpoint or feature)
+- tests/db/db.helper.ts: read-only pg queries (getExpenseById, getExpensesByTitles,
+  getUserByEmail) and expectExpenseRow; the pool is closed per worker by the
+  dbConnection fixture in fixtures/expenses.ts. DB checks live in the API specs, tagged @db
+- Skills in .claude/skills/: /write-api-tests (API tests for an endpoint or feature),
+  /write-db-tests (DB checks on API or UI actions)
 - AI-generated drafts go to review/ only; a human moves approved specs to tests/
 <!-- - Prompt log: docs/prompts.md -->
 

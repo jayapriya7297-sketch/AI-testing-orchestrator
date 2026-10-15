@@ -13,7 +13,9 @@ unexpectedly passing, and the test.fail() line should be removed).
 - Cause: routes/expenses.js looks up, updates and deletes by id only and never
   compares created_by with req.user; ids are sequential, so every record is reachable
 - Severity: High (BOLA, OWASP API #1)
-- Test: tests/api/expenses.spec.ts ("another user's expense"), 5 tests marked test.fail()
+- Test: tests/api/expenses.spec.ts ("another user's expense"), 5 tests marked test.fail();
+  the PUT and DELETE tests also check the database (@db): the row's values change and
+  the row is removed
 
 ## BUG-002: Non-string title returns "Title is required" instead of "Title must be a string"
 - Endpoint: POST /api/expenses (also PUT /api/expenses/:id and xlsx import, which share the validator)
