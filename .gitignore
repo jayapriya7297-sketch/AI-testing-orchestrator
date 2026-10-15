@@ -147,3 +147,11 @@ vite.config.ts.timestamp-*
 
 # Turbo Repo
 .turbo
+
+# AI Test Orchestrator
+!.env.example
+node_modules
+playwright-report/
+test-results/
+reports/
+.auth/

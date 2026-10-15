@@ -4,15 +4,16 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project state
 
-This repository is a fresh scaffold: it contains only a one-line `README.md` (`# AI-testing-orchestrator`) and a standard GitHub Node.js `.gitignore`. There is no source code, package manifest, build tooling, test framework, or lint configuration yet. The `.gitignore` suggests the project is intended to be a Node.js/JavaScript (or TypeScript) project.
+The system under test (Expense Manager app) lives in `app/`. Playwright tests, generator/ and reporting/ are not built yet.
 
-## Commands
+## Architecture (app/)
 
-None defined yet. Once a `package.json` (or equivalent) is added, update this section with the build, lint, test, and single-test commands.
-
-## Architecture
-
-Not yet established. Update this section as the orchestrator's core structure takes shape.
+- `app/db/init/` — `01-schema.sql` (users, expenses) and `02-seed.sql` (2 users, 20 expenses). Mounted into Postgres `docker-entrypoint-initdb.d`, so they run **only on a fresh volume**. Reseed: `docker compose down -v && docker compose up -d --build`.
+- `app/api/` — Express (CommonJS). `src/app.js` wires routes; `src/auth.js` JWT sign + `requireAuth`; `src/validate.js` shared expense validator (used by CRUD and xlsx import); `src/routes/expenses.js` CRUD + `/export` + `/import`.
+  - Errors: 400 `{error, details:[{field, message}]}` (import adds `row`), 401 `{error}` for missing/invalid token, 404 `{error}`.
+  - Categories: Food, Travel, Office, Utilities, Entertainment, Other.
+- `app/web/` — React + Vite, built and served by nginx on 5173; nginx proxies `/api` to the api service. Every input, button, table row and message has a `data-testid` (rows: `expense-row-{id}`, row actions: `edit-button-{id}`, `delete-button-{id}` → `confirm-delete-{id}`).
+- Setup: `cp .env.example .env` before the first `docker compose up`.
 
 # AI Test Orchestrator
 
