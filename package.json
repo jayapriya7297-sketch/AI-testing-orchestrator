@@ -1,0 +1,29 @@
+{
+  "name": "ai-testing-orchestrator",
+  "version": "1.0.0",
+  "private": true,
+  "description": "AI-assisted test orchestration for the Expense Manager app",
+  "type": "commonjs",
+  "scripts": {
+    "test": "playwright test",
+    "test:api": "playwright test --project=api",
+    "test:ui": "playwright test --project=ui",
+    "test:smoke": "playwright test --grep @smoke",
+    "report": "playwright show-report"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jayapriya7297-sketch/AI-testing-orchestrator.git"
+  },
+  "license": "ISC",
+  "devDependencies": {
+    "@playwright/test": "^1.64.1",
+    "@types/node": "^26.6.5",
+    "@types/pg": "^8.23.1",
+    "ajv": "^8.20.0",
+    "dotenv": "^18.0.8",
+    "exceljs": "^4.4.0",
+    "pg": "^8.23.1",
+    "typescript": "^7.0.2"
+  }
+}

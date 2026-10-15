@@ -4,7 +4,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project state
 
-The system under test (Expense Manager app) lives in `app/`. Playwright tests, generator/ and reporting/ are not built yet.
+The system under test (Expense Manager app) lives in `app/`. The Playwright harness is at the repo root; generator/ and reporting/ are not built yet.
+
+## Test harness (repo root)
+
+- npm scripts: `test`, `test:api`, `test:ui`, `test:smoke` (`--grep @smoke`), `report`.
+- `playwright.config.ts` projects: `setup` (`tests/auth.setup.ts`, logs in via UI → `.auth/user.json`), `api` (`tests/api`, baseURL `API_URL`), `ui` (`tests/ui`, baseURL `WEB_URL`, depends on setup, uses the saved storageState). Reports: `playwright-report/`, `reports/junit.xml`, `reports/results.json`.
+- `fixtures/env.ts` loads `.env`; all URLs and credentials (`ADMIN_EMAIL`, `ADMIN_PASSWORD`) come from there. `fixtures/api.ts` exports `test` with an `apiContext` fixture (admin Bearer token attached).
+- UI auth lives in localStorage (`expense_token`, `expense_user`). For a logged-out test, use `test.use({ storageState: { cookies: [], origins: [] } })`.
+- TypeScript 7: `tsconfig.json` uses `module: preserve` + `moduleResolution: bundler` (`node10` was removed). Type-check: `npx tsc --noEmit`.
 
 ## Architecture (app/)
 
