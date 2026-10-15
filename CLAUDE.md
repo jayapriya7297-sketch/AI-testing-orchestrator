@@ -22,7 +22,7 @@ generator/ (LLM test generation), reporting/, CI (GitHub Actions, Jenkins, n8n).
 - Start: docker compose up -d --build
 - Reseed: docker compose down -v && docker compose up -d --build
   (seed SQL runs only on a fresh volume)
-- Tests: npm test · npm run test:api · test:ui · test:smoke · report
+- Tests: npm test · npm run test:api · test:ui · test:db · test:db:all · test:smoke · report
 - Type-check: npx tsc --noEmit
 - Ports: web 5173 · api 3000 · postgres 5432 (db expenses, user qa_user)
 
@@ -41,7 +41,8 @@ generator/ (LLM test generation), reporting/, CI (GitHub Actions, Jenkins, n8n).
 
 ## Test harness (repo root)
 - playwright.config.ts projects: setup (tests/auth.setup.ts, UI login saved to
-  .auth/user.json), api (tests/api, baseURL API_URL), ui (tests/ui, baseURL WEB_URL,
+  .auth/user.json), api (tests/api, baseURL API_URL), db (tests/db, no baseURL: use apiContext or full URLs),
+  ui (tests/ui, baseURL WEB_URL,
   depends on setup, uses the saved storageState)
 - Reports: playwright-report/, reports/junit.xml, reports/results.json
 - fixtures/env.ts loads .env: all URLs and credentials (ADMIN_EMAIL, ADMIN_PASSWORD)
@@ -57,7 +58,8 @@ generator/ (LLM test generation), reporting/, CI (GitHub Actions, Jenkins, n8n).
 - docs/bugs-found.md: app bugs found by tests (BUG-nnn); pinned with test.fail() in the specs
 - tests/db/db.helper.ts: read-only pg queries (getExpenseById, getExpensesByTitles,
   getUserByEmail) and expectExpenseRow; the pool is closed per worker by the
-  dbConnection fixture in fixtures/expenses.ts. DB checks live in the API specs, tagged @db
+  dbConnection fixture in fixtures/expenses.ts. DB specs: tests/db/*.spec.ts (project db, tag @db)
+- fixtures/xlsx.ts: buildXlsx and uploadXlsx for import tests
 - Skills in .claude/skills/: /write-api-tests (API tests for an endpoint or feature),
   /write-db-tests (DB checks on API or UI actions)
 - AI-generated drafts go to review/ only; a human moves approved specs to tests/

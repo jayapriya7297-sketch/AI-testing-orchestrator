@@ -4,7 +4,6 @@ import { env } from '../../fixtures/env';
 import { errorSchema, validationErrorSchema } from '../../schemas/error.schema';
 import { expenseSchema, expenseListSchema, type Expense } from '../../schemas/expense.schema';
 import { expectSchema } from '../../schemas/validate';
-import { expectExpenseRow, getExpenseById, getExpensesByTitles } from '../db/db.helper';
 
 const EXPENSES = '/api/expenses';
 const UNKNOWN_ID = 999999999;
@@ -17,7 +16,7 @@ const IDOR_BUG = 'App bug BUG-001: no ownership check on /api/expenses (IDOR); s
 
 test.describe('Expenses CRUD', { tag: '@api' }, () => {
   test.describe('happy path', () => {
-    test('POST returns 201 with the created expense owned by the caller', { tag: ['@smoke', '@db'] }, async ({ apiContext, cleanup }) => {
+    test('POST returns 201 with the created expense owned by the caller', { tag: '@smoke' }, async ({ apiContext, cleanup }) => {
       const input = validExpense({ amount: 19.99, category: 'Travel', date: '2026-10-02' });
 
       const res = await apiContext.post(EXPENSES, { data: input });
@@ -27,7 +26,6 @@ test.describe('Expenses CRUD', { tag: '@api' }, () => {
       cleanup.track(apiContext, body.id);
       expectSchema(body, expenseSchema);
       expect(body).toMatchObject({ ...input, created_by: env.adminEmail });
-      await expectExpenseRow(await getExpenseById(body.id), input, env.adminEmail);
     });
 
     test('GET /:id returns 200 with the expense', { tag: '@smoke' }, async ({ apiContext, createExpense }) => {
@@ -66,7 +64,7 @@ test.describe('Expenses CRUD', { tag: '@api' }, () => {
       expect(body.map((e) => e.id)).not.toContain(food.id);
     });
 
-    test('PUT returns 200 with the updated expense and persists it', { tag: ['@regression', '@db'] }, async ({ apiContext, createExpense }) => {
+    test('PUT returns 200 with the updated expense and persists it', { tag: '@regression' }, async ({ apiContext, createExpense }) => {
       const created = await createExpense();
       const update = validExpense({ amount: 75, category: 'Office', date: '2026-10-10' });
 
@@ -78,13 +76,9 @@ test.describe('Expenses CRUD', { tag: '@api' }, () => {
       expect(body).toEqual({ ...update, id: created.id, created_by: created.created_by });
       const reread = await apiContext.get(`${EXPENSES}/${created.id}`);
       expect(await reread.json()).toEqual(body);
-      // Same row (id) and owner (created_by) as before; only the four fields changed.
-      const row = await getExpenseById(created.id);
-      await expectExpenseRow(row, update, env.adminEmail);
-      expect(row?.id).toBe(created.id);
     });
 
-    test('DELETE returns 204 and the expense is gone', { tag: ['@regression', '@db'] }, async ({ apiContext, createExpense }) => {
+    test('DELETE returns 204 and the expense is gone', { tag: '@regression' }, async ({ apiContext, createExpense }) => {
       const created = await createExpense();
 
       const res = await apiContext.delete(`${EXPENSES}/${created.id}`);
@@ -93,10 +87,9 @@ test.describe('Expenses CRUD', { tag: '@api' }, () => {
       expect(await res.text()).toBe('');
       const reread = await apiContext.get(`${EXPENSES}/${created.id}`);
       expect(reread.status()).toBe(404);
-      expect(await getExpenseById(created.id)).toBeNull();
     });
 
-    test('POST trims the title and accepts a numeric-string amount', { tag: ['@regression', '@db'] }, async ({ apiContext, cleanup }) => {
+    test('POST trims the title and accepts a numeric-string amount', { tag: '@regression' }, async ({ apiContext, cleanup }) => {
       const title = uniqueTitle();
 
       const res = await apiContext.post(EXPENSES, {
@@ -108,9 +101,6 @@ test.describe('Expenses CRUD', { tag: '@api' }, () => {
       cleanup.track(apiContext, body.id);
       expect(body.title).toBe(title);
       expect(body.amount).toBe(12.5);
-      const row = await getExpenseById(body.id);
-      expect(row?.title).toBe(title);
-      expect(row?.amount).toBe('12.50');
     });
 
     for (const [name, overrides] of [
@@ -119,7 +109,7 @@ test.describe('Expenses CRUD', { tag: '@api' }, () => {
       ['the maximum amount 1000000', { amount: 1000000 }],
       ['a leap-day date', { date: '2028-02-29' }],
     ] as const) {
-      test(`POST returns 201 for ${name}`, { tag: ['@regression', '@db'] }, async ({ apiContext, cleanup }) => {
+      test(`POST returns 201 for ${name}`, { tag: '@regression' }, async ({ apiContext, cleanup }) => {
         const input = validExpense(overrides);
 
         const res = await apiContext.post(EXPENSES, { data: input });
@@ -128,7 +118,6 @@ test.describe('Expenses CRUD', { tag: '@api' }, () => {
         const body = await res.json();
         cleanup.track(apiContext, body.id);
         expect(body).toMatchObject(input);
-        await expectExpenseRow(await getExpenseById(body.id), input, env.adminEmail);
       });
     }
   });
@@ -138,32 +127,31 @@ test.describe('Expenses CRUD', { tag: '@api' }, () => {
       { name: 'GET list', method: 'get', path: EXPENSES },
       { name: 'GET /:id', method: 'get', path: `${EXPENSES}/${UNKNOWN_ID}` },
       { name: 'POST', method: 'post', path: EXPENSES },
-      { name: 'PUT', method: 'put', path: `${EXPENSES}/:id` },
-      { name: 'DELETE', method: 'delete', path: `${EXPENSES}/:id` },
-    ] as const;
-    const unauthorized = [
-      { label: 'without a token', headers: {}, error: 'Authentication token missing' },
-      { label: 'with an invalid token', headers: { Authorization: 'Bearer not.a.jwt' }, error: 'Invalid or expired token' },
+      { name: 'PUT', method: 'put', path: `${EXPENSES}/${UNKNOWN_ID}` },
+      { name: 'DELETE', method: 'delete', path: `${EXPENSES}/${UNKNOWN_ID}` },
     ] as const;
 
     for (const call of calls) {
-      for (const auth of unauthorized) {
-        test(`${call.name} returns 401 ${auth.label}`, { tag: call.method === 'get' ? [] : ['@db'] }, async ({ request, createExpense }) => {
-          // PUT and DELETE target a real expense so the DB check proves it was not touched.
-          const target = call.path.endsWith(':id') ? await createExpense() : null;
-          const path = target ? call.path.replace(':id', String(target.id)) : call.path;
-          const input = validExpense();
+      test(`${call.name} returns 401 without a token`, async ({ request }) => {
+        const res = await request[call.method](call.path, { data: validExpense() });
 
-          const res = await request[call.method](path, { data: input, headers: auth.headers });
+        expect(res.status()).toBe(401);
+        const body = await res.json();
+        expectSchema(body, errorSchema);
+        expect(body.error).toBe('Authentication token missing');
+      });
 
-          expect(res.status()).toBe(401);
-          const body = await res.json();
-          expectSchema(body, errorSchema);
-          expect(body.error).toBe(auth.error);
-          if (target) await expectExpenseRow(await getExpenseById(target.id), target, env.adminEmail);
-          if (call.method === 'post') expect(await getExpensesByTitles([input.title as string])).toEqual([]);
+      test(`${call.name} returns 401 with an invalid token`, async ({ request }) => {
+        const res = await request[call.method](call.path, {
+          data: validExpense(),
+          headers: { Authorization: 'Bearer not.a.jwt' },
         });
-      }
+
+        expect(res.status()).toBe(401);
+        const body = await res.json();
+        expectSchema(body, errorSchema);
+        expect(body.error).toBe('Invalid or expired token');
+      });
     }
 
     test('returns 401 for a real token with a tampered signature', async ({ request }) => {
@@ -220,17 +208,13 @@ test.describe('Expenses CRUD', { tag: '@api' }, () => {
     ];
 
     for (const c of invalid) {
-      test(`POST returns 400 when ${c.name}`, { tag: '@db' }, async ({ apiContext }) => {
-        const input = validExpense(c.overrides);
-
-        const res = await apiContext.post(EXPENSES, { data: input });
+      test(`POST returns 400 when ${c.name}`, async ({ apiContext }) => {
+        const res = await apiContext.post(EXPENSES, { data: validExpense(c.overrides) });
 
         expect(res.status()).toBe(400);
         const body = await res.json();
         expectSchema(body, validationErrorSchema);
         expect(body.details).toEqual([{ field: c.field, message: c.message }]);
-        const title = input.title as string;
-        expect(await getExpensesByTitles([title, title.trim()])).toEqual([]);
       });
     }
 
@@ -246,7 +230,7 @@ test.describe('Expenses CRUD', { tag: '@api' }, () => {
       expect(body.details).toEqual([{ field: 'title', message: 'Title must be a string' }]);
     });
 
-    test('PUT returns 400 for an invalid body and leaves the expense unchanged', { tag: '@db' }, async ({ apiContext, createExpense }) => {
+    test('PUT returns 400 for an invalid body and leaves the expense unchanged', async ({ apiContext, createExpense }) => {
       const created = await createExpense();
 
       const res = await apiContext.put(`${EXPENSES}/${created.id}`, {
@@ -259,7 +243,6 @@ test.describe('Expenses CRUD', { tag: '@api' }, () => {
       expect(body.details.map((d: { field: string }) => d.field)).toEqual(['amount', 'category']);
       const reread = await apiContext.get(`${EXPENSES}/${created.id}`);
       expect(await reread.json()).toEqual(created);
-      await expectExpenseRow(await getExpenseById(created.id), created, env.adminEmail);
     });
 
     for (const method of ['get', 'put', 'delete'] as const) {
@@ -337,7 +320,7 @@ test.describe('Expenses CRUD', { tag: '@api' }, () => {
       expect([403, 404]).toContain(res.status());
     });
 
-    test('PUT returns 403 or 404 for another user\'s expense and leaves it unchanged', { tag: '@db' }, async ({ apiContext, userApiContext, createExpense }) => {
+    test('PUT returns 403 or 404 for another user\'s expense and leaves it unchanged', async ({ apiContext, userApiContext, createExpense }) => {
       test.fail(true, IDOR_BUG);
       const adminExpense = await createExpense();
 
@@ -345,24 +328,20 @@ test.describe('Expenses CRUD', { tag: '@api' }, () => {
         data: validExpense({ title: 'hijacked', amount: 1 }),
       });
 
-      // Soft so the API and DB checks below still run and report what the bug changed.
-      expect.soft([403, 404]).toContain(res.status());
+      expect([403, 404]).toContain(res.status());
       const reread = await apiContext.get(`${EXPENSES}/${adminExpense.id}`);
-      expect.soft(await reread.json()).toEqual(adminExpense);
-      await expectExpenseRow(await getExpenseById(adminExpense.id), adminExpense, env.adminEmail);
+      expect(await reread.json()).toEqual(adminExpense);
     });
 
-    test('DELETE returns 403 or 404 for another user\'s expense and keeps it', { tag: '@db' }, async ({ apiContext, userApiContext, createExpense }) => {
+    test('DELETE returns 403 or 404 for another user\'s expense and keeps it', async ({ apiContext, userApiContext, createExpense }) => {
       test.fail(true, IDOR_BUG);
       const adminExpense = await createExpense();
 
       const res = await userApiContext.delete(`${EXPENSES}/${adminExpense.id}`);
 
-      // Soft so the API and DB checks below still run and report what the bug changed.
-      expect.soft([403, 404]).toContain(res.status());
+      expect([403, 404]).toContain(res.status());
       const reread = await apiContext.get(`${EXPENSES}/${adminExpense.id}`);
-      expect.soft(reread.status()).toBe(200);
-      await expectExpenseRow(await getExpenseById(adminExpense.id), adminExpense, env.adminEmail);
+      expect(reread.status()).toBe(200);
     });
 
     test('GET list does not include another user\'s expense', async ({ userApiContext, createExpense }) => {

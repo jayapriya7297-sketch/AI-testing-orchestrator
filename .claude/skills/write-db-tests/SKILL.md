@@ -26,9 +26,10 @@ Rules: follow CLAUDE.md and tests/CLAUDE.md. This skill is only the procedure.
      unchanged, or no new row was inserted
    - Import: number of rows inserted equals valid rows in the file;
      invalid rows inserted nothing
-4. Add the checks to the existing API tests (preferred) or to
-   tests/db/<feature>.spec.ts. Tag them @db in addition to the layer tag.
-5. Run: npx playwright test --grep @db
+4. Write the checks in tests/db/<feature>.spec.ts (project db, no baseURL),
+   not in the API specs: make the action through the API, assert only the status,
+   then check the rows. Tag @db plus @smoke or @regression.
+5. Run: npm run test:db
 6. Handle failures as tests/CLAUDE.md says. A DB check that fails because of
    a known bug (see docs/bugs-found.md) gets test.fail() with the bug id.
 7. Summarise: checks added, passed, failed, and any new data bugs found.

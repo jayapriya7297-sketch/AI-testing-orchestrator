@@ -8,6 +8,8 @@
     "test": "playwright test",
     "test:api": "playwright test --project=api",
     "test:ui": "playwright test --project=ui",
+    "test:db": "playwright test --project=db",
+    "test:db:all": "playwright test --grep @db",
     "test:smoke": "playwright test --grep @smoke",
     "report": "playwright show-report"
   },

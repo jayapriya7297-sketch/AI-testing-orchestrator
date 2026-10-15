@@ -21,7 +21,9 @@
 - Logged-out tests: test.use({ storageState: { cookies: [], origins: [] } })
 
 ## DB and files
-- DB checks are read-only via tests/db/db.helper.ts; always close connections
+- DB checks are read-only via tests/db/db.helper.ts; always close connections.
+  Exception: constraint tests in tests/db/ may attempt writes, but only inside
+  BEGIN ... ROLLBACK
 - Downloads: page.waitForEvent('download'), parse with exceljs, compare with the API
 - Uploads live in fixtures/; include one malformed-file case
 

@@ -30,6 +30,10 @@ export default defineConfig({
       use: { baseURL: env.apiUrl },
     },
     {
+      name: 'db',
+      testDir: './tests/db',
+    },
+    {
       name: 'ui',
       testDir: './tests/ui',
       dependencies: ['setup'],
