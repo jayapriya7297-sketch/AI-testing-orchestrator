@@ -53,7 +53,7 @@ generator/ (LLM test generation), reporting/, CI (GitHub Actions, Jenkins, n8n).
 - Test rules: tests/CLAUDE.md. Read it before changing tests, pages/, fixtures/ or schemas/
 - Skills in .claude/skills/: /write-api-tests (API tests for an endpoint or feature)
 - AI-generated drafts go to review/ only; a human moves approved specs to tests/
-- Prompt log: docs/prompts.md
+<!-- - Prompt log: docs/prompts.md -->
 
 ## Working style
 - Plan before large changes; work in small, testable slices
