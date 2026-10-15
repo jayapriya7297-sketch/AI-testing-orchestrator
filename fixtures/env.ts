@@ -20,4 +20,10 @@ export const env = {
   get adminPassword() {
     return required('ADMIN_PASSWORD');
   },
+  get userEmail() {
+    return required('USER_EMAIL');
+  },
+  get userPassword() {
+    return required('USER_PASSWORD');
+  },
 };

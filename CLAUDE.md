@@ -51,6 +51,10 @@ generator/ (LLM test generation), reporting/, CI (GitHub Actions, Jenkins, n8n).
 
 ## Where things live
 - Test rules: tests/CLAUDE.md. Read it before changing tests, pages/, fixtures/ or schemas/
+- fixtures/api.ts: apiContext (admin) and userApiContext (USER_EMAIL); fixtures/expenses.ts:
+  createExpense + cleanup (auto-delete) and validExpense/uniqueTitle; fixtures/files/: upload files
+- schemas/: ajv schemas (auth, expense, error) and expectSchema() in schemas/validate.ts
+- docs/bugs-found.md: app bugs found by tests (BUG-nnn); pinned with test.fail() in the specs
 - Skills in .claude/skills/: /write-api-tests (API tests for an endpoint or feature)
 - AI-generated drafts go to review/ only; a human moves approved specs to tests/
 <!-- - Prompt log: docs/prompts.md -->
