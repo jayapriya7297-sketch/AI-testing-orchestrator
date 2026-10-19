@@ -63,6 +63,8 @@ generator/ (LLM test generation), reporting/, CI (GitHub Actions, Jenkins, n8n).
 - Skills in .claude/skills/: /write-api-tests (API tests for an endpoint or feature),
   /write-db-tests (DB checks on API or UI actions)
 - AI-generated drafts go to review/ only; a human moves approved specs to tests/
+- /add-page-object: page object for a UI screen
+- /write-ui-tests: UI tests for a screen or user journey
 <!-- - Prompt log: docs/prompts.md -->
 
 ## Working style
