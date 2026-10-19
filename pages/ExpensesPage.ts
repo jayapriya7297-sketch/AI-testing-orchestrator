@@ -1,4 +1,5 @@
 import type { Locator, Page } from '@playwright/test';
+import { ExpenseForm } from './ExpenseForm';
 
 export class ExpensesPage {
   readonly userEmail: Locator;
@@ -17,6 +18,7 @@ export class ExpensesPage {
   readonly emptyState: Locator;
   readonly loading: Locator;
   readonly expenseCount: Locator;
+  readonly form: ExpenseForm;
 
   constructor(private readonly page: Page) {
     this.userEmail = page.getByTestId('user-email');
@@ -35,6 +37,7 @@ export class ExpensesPage {
     this.emptyState = page.getByTestId('empty-state');
     this.loading = page.getByTestId('loading');
     this.expenseCount = page.getByTestId('expense-count');
+    this.form = new ExpenseForm(page);
   }
 
   async goto(): Promise<void> {
@@ -69,6 +72,18 @@ export class ExpensesPage {
   }
 
   /** Selects a category and waits for the filtered list request to finish. */
+  cancelDeleteButton(id: number): Locator {
+    return this.page.getByTestId(`cancel-delete-${id}`);
+  }
+
+  async openAddForm(): Promise<void> {
+    await this.addExpenseButton.click();
+  }
+
+  async openEdit(id: number): Promise<void> {
+    await this.editButton(id).click();
+  }
+
   async filterByCategory(category: string): Promise<void> {
     const value = category === 'All' ? '' : category;
     const listed = this.page.waitForResponse((res) => {
@@ -84,6 +99,11 @@ export class ExpensesPage {
   async deleteExpense(id: number): Promise<void> {
     await this.deleteButton(id).click();
     await this.confirmDeleteButton(id).click();
+  }
+
+  async cancelDelete(id: number): Promise<void> {
+    await this.deleteButton(id).click();
+    await this.cancelDeleteButton(id).click();
   }
 
   async logout(): Promise<void> {

@@ -58,7 +58,7 @@ export default function ExpenseForm({ expense, onSubmit, onCancel }) {
       <div className="fields">
         <div>
           <label htmlFor="expense-title">Title</label>
-          <input id="expense-title" value={values.title} onChange={update('title')} data-testid="expense-title" />
+          <input id="expense-title" value={values.title} onChange={update('title')} data-testid="form-title" />
           {fieldError('title')}
         </div>
         <div>
@@ -70,7 +70,7 @@ export default function ExpenseForm({ expense, onSubmit, onCancel }) {
             min="0"
             value={values.amount}
             onChange={update('amount')}
-            data-testid="expense-amount"
+            data-testid="form-amount"
           />
           {fieldError('amount')}
         </div>
@@ -80,7 +80,7 @@ export default function ExpenseForm({ expense, onSubmit, onCancel }) {
             id="expense-category"
             value={values.category}
             onChange={update('category')}
-            data-testid="expense-category"
+            data-testid="form-category"
           >
             <option value="">Select a category</option>
             {CATEGORIES.map((c) => (
@@ -93,7 +93,7 @@ export default function ExpenseForm({ expense, onSubmit, onCancel }) {
         </div>
         <div>
           <label htmlFor="expense-date">Date</label>
-          <input id="expense-date" type="date" value={values.date} onChange={update('date')} data-testid="expense-date" />
+          <input id="expense-date" type="date" value={values.date} onChange={update('date')} data-testid="form-date" />
           {fieldError('date')}
         </div>
       </div>
