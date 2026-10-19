@@ -7,6 +7,7 @@
 - No waitForTimeout or sleeps; use expect() and auto-waiting
 - Titles state the expected result ("returns 400 when amount is negative");
   group with test.describe
+- Never edit or delete seed rows; create your own data for anything that changes
 
 ## API
 - Use apiContext from fixtures/api.ts; check status AND body; validate bodies
@@ -17,7 +18,6 @@
 - Locators: getByTestId or getByRole only. Missing testid: add it to the
   component and report it
 - Page objects hold locators and actions; assertions stay in specs
-//- Set up data via the API in beforeEach
 - Set up data via the API, in beforeEach or at the start of the test
 - Logged-out tests: test.use({ storageState: { cookies: [], origins: [] } })
 
