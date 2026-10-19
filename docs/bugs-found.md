@@ -15,7 +15,8 @@ unexpectedly passing, and the test.fail() line should be removed).
 - Severity: High (BOLA, OWASP API #1)
 - Test: tests/api/expenses.spec.ts ("another user's expense"), 5 tests marked test.fail();
   tests/db/expenses.spec.ts ("by another user"), 2 tests marked test.fail(): the row's
-  values change and the row is removed
+  values change and the row is removed; tests/ui/expense-list.spec.ts ("as a regular user"),
+  1 test marked test.fail(): the user's list shows admin's expenses
 
 ## BUG-002: Non-string title returns "Title is required" instead of "Title must be a string"
 - Endpoint: POST /api/expenses (also PUT /api/expenses/:id and xlsx import, which share the validator)

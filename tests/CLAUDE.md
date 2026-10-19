@@ -17,7 +17,8 @@
 - Locators: getByTestId or getByRole only. Missing testid: add it to the
   component and report it
 - Page objects hold locators and actions; assertions stay in specs
-- Set up data via the API in beforeEach
+//- Set up data via the API in beforeEach
+- Set up data via the API, in beforeEach or at the start of the test
 - Logged-out tests: test.use({ storageState: { cookies: [], origins: [] } })
 
 ## DB and files

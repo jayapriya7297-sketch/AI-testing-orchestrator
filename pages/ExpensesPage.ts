@@ -15,6 +15,7 @@ export class ExpensesPage {
   readonly table: Locator;
   readonly rows: Locator;
   readonly emptyState: Locator;
+  readonly loading: Locator;
   readonly expenseCount: Locator;
 
   constructor(private readonly page: Page) {
@@ -32,6 +33,7 @@ export class ExpensesPage {
     this.table = page.getByTestId('expenses-table');
     this.rows = page.getByTestId(/^expense-row-\d+$/);
     this.emptyState = page.getByTestId('empty-state');
+    this.loading = page.getByTestId('loading');
     this.expenseCount = page.getByTestId('expense-count');
   }
 
@@ -41,6 +43,17 @@ export class ExpensesPage {
 
   row(id: number): Locator {
     return this.page.getByTestId(`expense-row-${id}`);
+  }
+
+  rowByTitle(title: string): Locator {
+    return this.rows.filter({
+      has: this.page.getByTestId('expense-title').getByText(title, { exact: true }),
+    });
+  }
+
+  /** Every cell of one column in the table, e.g. cells('category') for expense-category. */
+  cells(column: 'title' | 'amount' | 'category' | 'date' | 'created-by'): Locator {
+    return this.table.getByTestId(`expense-${column}`);
   }
 
   editButton(id: number): Locator {
@@ -55,8 +68,17 @@ export class ExpensesPage {
     return this.page.getByTestId(`confirm-delete-${id}`);
   }
 
+  /** Selects a category and waits for the filtered list request to finish. */
   async filterByCategory(category: string): Promise<void> {
-    await this.categoryFilter.selectOption(category === 'All' ? '' : category);
+    const value = category === 'All' ? '' : category;
+    const listed = this.page.waitForResponse((res) => {
+      const url = new URL(res.url());
+      return (
+        url.pathname === '/api/expenses' && (url.searchParams.get('category') ?? '') === value
+      );
+    });
+    await this.categoryFilter.selectOption(value);
+    await listed;
   }
 
   async deleteExpense(id: number): Promise<void> {
