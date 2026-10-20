@@ -11,7 +11,6 @@
  */
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import ExcelJS from 'exceljs';
 import type { APIRequestContext } from '@playwright/test';
 import { test, expect, uniqueTitle } from '../../fixtures/expenses';
 import { env } from '../../fixtures/env';
@@ -19,51 +18,22 @@ import { errorSchema, importErrorSchema, validationErrorSchema } from '../../sch
 import type { Expense } from '../../schemas/expense.schema';
 import { importSuccessSchema } from '../../schemas/expense.schema';
 import { expectSchema } from '../../schemas/validate';
-import { buildXlsx, uploadXlsx as upload, XLSX_TYPE, type Cell } from '../../fixtures/xlsx';
+import {
+  buildXlsx,
+  expectExportMatchesList,
+  FILES_DIR as FILES,
+  readExport,
+  uploadXlsx as upload,
+  XLSX_TYPE,
+  type Cell,
+} from '../../fixtures/xlsx';
 
 const EXPORT = '/api/expenses/export';
 const IMPORT = '/api/expenses/import';
-const FILES = path.join(__dirname, '../../fixtures/files');
-
-type ExportRow = { id: number; title: string; amount: number; category: string; date: string; createdBy: string };
-
-async function readExport(body: Buffer): Promise<{ headers: unknown[]; rows: ExportRow[] }> {
-  const workbook = new ExcelJS.Workbook();
-  await workbook.xlsx.load(body as unknown as ExcelJS.Buffer);
-  const sheet = workbook.worksheets[0];
-  const headers = (sheet.getRow(1).values as unknown[]).slice(1);
-  const rows: ExportRow[] = [];
-  sheet.eachRow((row, n) => {
-    if (n === 1) return;
-    const v = row.values as Cell[];
-    rows.push({
-      id: v[1] as number,
-      title: v[2] as string,
-      amount: v[3] as number,
-      category: v[4] as string,
-      date: v[5] as string,
-      createdBy: v[6] as string,
-    });
-  });
-  return { headers, rows };
-}
 
 async function listIds(ctx: APIRequestContext, category?: string): Promise<number[]> {
   const res = await ctx.get('/api/expenses', { params: category ? { category } : {} });
   return ((await res.json()) as Expense[]).map((e) => e.id);
-}
-
-/**
- * Other workers create and delete expenses in parallel, so the export is compared with
- * the API list taken just before and just after it: every id present in both lists must
- * be exported, and nothing outside either list may be.
- */
-function expectExportMatchesList(exportedIds: number[], before: number[], after: number[]) {
-  const stable = before.filter((id) => after.includes(id));
-  const seen = new Set([...before, ...after]);
-  expect(exportedIds).toEqual(expect.arrayContaining(stable));
-  expect(exportedIds.filter((id) => !seen.has(id))).toEqual([]);
-  expect(new Set(exportedIds).size).toBe(exportedIds.length);
 }
 
 test.describe('GET /api/expenses/export', { tag: ['@api', '@file'] }, () => {

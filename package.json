@@ -11,7 +11,8 @@
     "test:db": "playwright test --project=db",
     "test:db:all": "playwright test --grep @db",
     "test:smoke": "playwright test --grep @smoke",
-    "report": "playwright show-report"
+    "report": "playwright show-report",
+    "fixtures:files": "node scripts/build-fixture-files.mts"
   },
   "repository": {
     "type": "git",

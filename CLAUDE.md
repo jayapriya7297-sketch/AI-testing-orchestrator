@@ -59,7 +59,12 @@ generator/ (LLM test generation), reporting/, CI (GitHub Actions, Jenkins, n8n).
 - tests/db/db.helper.ts: read-only pg queries (getExpenseById, getExpensesByTitles,
   getUserByEmail) and expectExpenseRow; the pool is closed per worker by the
   dbConnection fixture in fixtures/expenses.ts. DB specs: tests/db/*.spec.ts (project db, tag @db)
-- fixtures/xlsx.ts: buildXlsx and uploadXlsx for import tests
+- fixtures/xlsx.ts: buildXlsx and uploadXlsx for import tests; readExport and
+  expectExportMatchesList for export checks; fixtureWithUniqueTitles (adds a unique
+  suffix to titles of a fixtures/files workbook that inserts rows)
+- scripts/build-fixture-files.mts: rebuilds the upload files in fixtures/files/
+  (npm run fixtures:files); malformed ones are uploaded as-is
+- tests/ui/expense-files.spec.ts: Export button and import form (@ui @file) with DB checks
 - Skills in .claude/skills/: /write-api-tests (API tests for an endpoint or feature),
   /write-db-tests (DB checks on API or UI actions)
 - AI-generated drafts go to review/ only; a human moves approved specs to tests/

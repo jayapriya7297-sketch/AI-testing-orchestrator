@@ -1,4 +1,4 @@
-import type { Locator, Page } from '@playwright/test';
+import type { Download, Locator, Page, Response } from '@playwright/test';
 import { ExpenseForm } from './ExpenseForm';
 
 export class ExpensesPage {
@@ -71,7 +71,6 @@ export class ExpensesPage {
     return this.page.getByTestId(`confirm-delete-${id}`);
   }
 
-  /** Selects a category and waits for the filtered list request to finish. */
   cancelDeleteButton(id: number): Locator {
     return this.page.getByTestId(`cancel-delete-${id}`);
   }
@@ -84,6 +83,7 @@ export class ExpensesPage {
     await this.editButton(id).click();
   }
 
+  /** Selects a category and waits for the filtered list request to finish. */
   async filterByCategory(category: string): Promise<void> {
     const value = category === 'All' ? '' : category;
     const listed = this.page.waitForResponse((res) => {
@@ -104,6 +104,26 @@ export class ExpensesPage {
   async cancelDelete(id: number): Promise<void> {
     await this.deleteButton(id).click();
     await this.cancelDeleteButton(id).click();
+  }
+
+  /** Clicks Export and returns the download it triggers. */
+  async exportFile(): Promise<Download> {
+    const download = this.page.waitForEvent('download');
+    await this.exportButton.click();
+    return download;
+  }
+
+  /**
+   * Chooses file (a path or an in-memory buffer), clicks Import and returns the
+   * POST /api/expenses/import response.
+   */
+  async importFile(file: string | { name: string; mimeType: string; buffer: Buffer }): Promise<Response> {
+    await this.importInput.setInputFiles(file);
+    const imported = this.page.waitForResponse(
+      (res) => new URL(res.url()).pathname === '/api/expenses/import' && res.request().method() === 'POST',
+    );
+    await this.importButton.click();
+    return imported;
   }
 
   async logout(): Promise<void> {
