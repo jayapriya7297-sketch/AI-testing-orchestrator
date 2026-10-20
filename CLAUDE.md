@@ -4,7 +4,7 @@ QA portfolio project: an Expense Manager app (app/) and a Playwright framework
 (repo root) testing UI, API, DB and Excel files. Test generation from
 requirements runs as the /generate-tests skill. Planned, not built yet:
 generator/ (API-key script for automated generation),
-CI (GitHub Actions, Jenkins, n8n).
+Jenkins and n8n pipelines.
 
 ## Stack
 - App: React + Vite (served by nginx), Express API (CommonJS), PostgreSQL 16, Docker Compose
@@ -57,7 +57,8 @@ CI (GitHub Actions, Jenkins, n8n).
   fails if it doesn't match the installed @playwright/test) with npm ci inside; tests.Dockerfile.dockerignore
   keeps out node_modules and .env. Uses WEB_URL http://web:5173, API_URL http://api:3000,
   DATABASE_URL db:5432; mounts reports/, playwright-report/, test-results/ to the host.
-  scripts/test-docker.sh [playwright args] drives it and keeps the tests' exit code
+  scripts/test-docker.sh [playwright args] drives it, keeps the tests' exit code and chowns
+  the mounted result folders to the host user (the container runs as root)
 - Traces: retain-on-failure (trace.zip in test-results/ for every failed test)
 - fixtures/env.ts loads .env: WEB_URL, API_URL, DATABASE_URL, ADMIN_EMAIL,
   ADMIN_PASSWORD, USER_EMAIL, USER_PASSWORD
@@ -94,6 +95,8 @@ CI (GitHub Actions, Jenkins, n8n).
 - npm run report:excel: reporting/build-report.mts turns reports/results.json into
   reports/results.xlsx (Summary, Results, Known bugs from test.fail() annotations)
 - reports/failure-summary.md: written by /summarize-failures (reports/ is gitignored)
+- reporting/results.mts: shared reader for results.json (statuses, counts);
+  reporting/job-summary.mts prints the Markdown summary for CI
 
 ### Requirements and AI drafts
 - requirements/expenses.xlsx: REQ-001..010 (story, acceptance criteria, priority,
@@ -112,6 +115,15 @@ CI (GitHub Actions, Jenkins, n8n).
 - /generate-tests: requirements → Gherkin + Playwright drafts in review/
 - /summarize-failures: classify failed tests (app / test / environment) into
   reports/failure-summary.md; never changes code
+
+## CI (.github/workflows/ci.yml)
+- GitHub Actions, one job on ubuntu-latest: pull_request and push to main run smoke;
+  "Run workflow" (workflow_dispatch) takes suite smoke | full
+- Runs npm run test:docker[:smoke] with .env copied from .env.example (demo values, no
+  secrets); host Node from .nvmrc only reads package-lock.json and writes the summary
+- Job summary from reporting/job-summary.mts; artifacts (14 days, uploaded even on failure):
+  playwright-report-<suite>, reports-<suite>, traces-<suite> (test-results/)
+- timeout 20 min; one run per branch, a newer push cancels the older one
 
 ## Working style
 - Plan before large changes; work in small, testable slices

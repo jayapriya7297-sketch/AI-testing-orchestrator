@@ -24,8 +24,13 @@ echo "test-docker: using $IMAGE"
 docker compose --profile test down -v
 docker compose up -d --build --wait || { docker compose --profile test down; exit 1; }
 
-docker compose --profile test run --rm --build tests \
-  sh -c 'npx playwright test "$@"; status=$?; node reporting/build-report.mts; exit $status' sh "$@"
+# The container runs as root; hand the mounted result folders back to the host user so a
+# Linux host (CI runner, Jenkins agent) can clean up or rewrite them.
+docker compose --profile test run --rm --build -e HOST_UID="$(id -u)" -e HOST_GID="$(id -g)" tests \
+  sh -c 'npx playwright test "$@"; status=$?
+    node reporting/build-report.mts
+    chown -R "$HOST_UID:$HOST_GID" reports playwright-report test-results
+    exit $status' sh "$@"
 status=$?
 
 docker compose --profile test down
