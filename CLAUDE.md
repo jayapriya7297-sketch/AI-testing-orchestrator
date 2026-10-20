@@ -65,6 +65,8 @@ generator/ (LLM test generation), reporting/, CI (GitHub Actions, Jenkins, n8n).
 - scripts/build-fixture-files.mts: rebuilds the upload files in fixtures/files/
   (npm run fixtures:files); malformed ones are uploaded as-is
 - tests/ui/expense-files.spec.ts: Export button and import form (@ui @file) with DB checks
+- requirements/expenses.xlsx: requirements REQ-001..010 (story, acceptance criteria, linked bugs,
+  priority, status), built by scripts/build-requirements.mts (npm run requirements:build)
 - Skills in .claude/skills/: /write-api-tests (API tests for an endpoint or feature),
   /write-db-tests (DB checks on API or UI actions)
 - AI-generated drafts go to review/ only; a human moves approved specs to tests/

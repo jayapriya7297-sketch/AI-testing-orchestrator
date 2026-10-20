@@ -12,7 +12,8 @@
     "test:db:all": "playwright test --grep @db",
     "test:smoke": "playwright test --grep @smoke",
     "report": "playwright show-report",
-    "fixtures:files": "node scripts/build-fixture-files.mts"
+    "fixtures:files": "node scripts/build-fixture-files.mts",
+    "requirements:build": "node scripts/build-requirements.mts"
   },
   "repository": {
     "type": "git",
