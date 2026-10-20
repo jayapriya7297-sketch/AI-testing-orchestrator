@@ -2,7 +2,7 @@ import ExcelJS from 'exceljs';
 import { test, expect, validExpense, uniqueTitle } from '../../fixtures/expenses';
 import { env } from '../../fixtures/env';
 import { errorSchema, validationErrorSchema } from '../../schemas/error.schema';
-import { expenseSchema, expenseListSchema, type Expense } from '../../schemas/expense.schema';
+import { CATEGORIES, expenseSchema, expenseListSchema, type Expense } from '../../schemas/expense.schema';
 import { expectSchema } from '../../schemas/validate';
 
 const EXPENSES = '/api/expenses';
@@ -103,12 +103,18 @@ test.describe('Expenses CRUD', { tag: '@api' }, () => {
       expect(body.amount).toBe(12.5);
     });
 
-    for (const [name, overrides] of [
+    const accepted: [string, Record<string, unknown>][] = [
       ['a 200-character title', { title: `${uniqueTitle()} `.padEnd(200, 'x') }],
       ['the minimum amount 0.01', { amount: 0.01 }],
       ['the maximum amount 1000000', { amount: 1000000 }],
+      ['the amount 999999.99', { amount: 999999.99 }],
       ['a leap-day date', { date: '2028-02-29' }],
-    ] as const) {
+      ['a future date', { date: '2099-12-31' }],
+      ['an old date', { date: '1900-01-01' }],
+      ...CATEGORIES.map((category): [string, Record<string, unknown>] => [`category ${category}`, { category }]),
+    ];
+
+    for (const [name, overrides] of accepted) {
       test(`POST returns 201 for ${name}`, { tag: '@regression' }, async ({ apiContext, cleanup }) => {
         const input = validExpense(overrides);
 
@@ -117,6 +123,7 @@ test.describe('Expenses CRUD', { tag: '@api' }, () => {
         expect(res.status(), await res.text()).toBe(201);
         const body = await res.json();
         cleanup.track(apiContext, body.id);
+        expectSchema(body, expenseSchema);
         expect(body).toMatchObject(input);
       });
     }
@@ -191,13 +198,21 @@ test.describe('Expenses CRUD', { tag: '@api' }, () => {
       ]);
     });
 
+    // An undefined override drops the field from the JSON body.
     const invalid: { name: string; overrides: Record<string, unknown>; field: string; message: string }[] = [
+      { name: 'title is missing', overrides: { title: undefined }, field: 'title', message: 'Title is required' },
+      { name: 'amount is missing', overrides: { amount: undefined }, field: 'amount', message: 'Amount is required' },
+      { name: 'category is missing', overrides: { category: undefined }, field: 'category', message: 'Category is required' },
+      { name: 'date is missing', overrides: { date: undefined }, field: 'date', message: 'Date is required' },
       { name: 'title is only whitespace', overrides: { title: '    ' }, field: 'title', message: 'Title is required' },
       { name: 'title is longer than 200 characters', overrides: { title: 'x'.repeat(201) }, field: 'title', message: 'Title must be at most 200 characters' },
       { name: 'amount is not a number', overrides: { amount: 'abc' }, field: 'amount', message: 'Amount must be a number' },
       { name: 'amount is a boolean', overrides: { amount: true }, field: 'amount', message: 'Amount must be a number' },
       { name: 'amount is zero', overrides: { amount: 0 }, field: 'amount', message: 'Amount must be greater than 0' },
       { name: 'amount is negative', overrides: { amount: -5 }, field: 'amount', message: 'Amount must be greater than 0' },
+      { name: 'amount is -0.01', overrides: { amount: -0.01 }, field: 'amount', message: 'Amount must be greater than 0' },
+      { name: 'amount has a thousands separator ("1,000")', overrides: { amount: '1,000' }, field: 'amount', message: 'Amount must be a number' },
+      { name: 'amount has a decimal comma ("12,50")', overrides: { amount: '12,50' }, field: 'amount', message: 'Amount must be a number' },
       { name: 'amount is above 1000000', overrides: { amount: 1000000.01 }, field: 'amount', message: 'Amount must be at most 1000000' },
       { name: 'amount has 3 decimal places', overrides: { amount: 10.123 }, field: 'amount', message: 'Amount must have at most 2 decimal places' },
       { name: 'category is not allowed', overrides: { category: 'Groceries' }, field: 'category', message: 'Category must be one of: Food, Travel, Office, Utilities, Entertainment, Other' },

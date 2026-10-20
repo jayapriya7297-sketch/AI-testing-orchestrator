@@ -1,4 +1,4 @@
-import { test, expect } from '../../fixtures/expenses';
+import { test, expect, uniqueTitle } from '../../fixtures/expenses';
 import { env } from '../../fixtures/env';
 import { LoginPage } from '../../pages/LoginPage';
 import { ExpensesPage } from '../../pages/ExpensesPage';
@@ -57,6 +57,34 @@ test.describe('expense list', () => {
 
       expect(dates.length).toBeGreaterThan(1);
       expect(dates).toEqual([...dates].sort().reverse());
+    });
+
+    test('a back-dated new expense appears in date order @ui @regression', async ({ apiContext, cleanup }) => {
+      const title = uniqueTitle('ui-test');
+      cleanup.trackTitles(apiContext, [title]);
+
+      await expensesPage.openAddForm();
+      await expensesPage.form.save({ title, amount: '42.50', category: 'Food', date: '2020-01-15' });
+
+      await expect(expensesPage.successMessage).toHaveText('Expense added');
+      await expect(expensesPage.rowByTitle(title)).toHaveCount(1);
+      const dates = await expensesPage.cells('date').allTextContents();
+      expect(dates).toEqual([...dates].sort().reverse());
+    });
+
+    test('on the same date the newer expense is listed first @ui @regression', async ({
+      page,
+      createExpense,
+    }) => {
+      const older = await createExpense({ date: '2020-02-20' });
+      const newer = await createExpense({ date: '2020-02-20' });
+      await page.reload();
+      await expect(expensesPage.row(newer.id)).toBeVisible();
+
+      const titles = await expensesPage.cells('title').allTextContents();
+
+      expect(newer.id).toBeGreaterThan(older.id);
+      expect(titles.indexOf(newer.title)).toBeLessThan(titles.indexOf(older.title));
     });
 
     test('footer count matches the number of rows shown @ui @regression', async () => {

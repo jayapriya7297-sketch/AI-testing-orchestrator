@@ -5,6 +5,7 @@
  */
 import { test, expect, validExpense, uniqueTitle } from '../../fixtures/expenses';
 import { env } from '../../fixtures/env';
+import { CATEGORIES } from '../../schemas/expense.schema';
 import { expectExpenseRow, getExpenseById, getExpensesByTitles } from './db.helper';
 
 const EXPENSES = '/api/expenses';
@@ -45,12 +46,18 @@ test.describe('Expenses CRUD in the database', { tag: '@db' }, () => {
       expect(row?.amount).toBe('12.50');
     });
 
-    for (const [name, overrides] of [
+    const stored: [string, Record<string, unknown>][] = [
       ['a 200-character title', { title: `${uniqueTitle()} `.padEnd(200, 'x') }],
       ['the minimum amount 0.01', { amount: 0.01 }],
       ['the maximum amount 1000000', { amount: 1000000 }],
+      ['the amount 999999.99', { amount: 999999.99 }],
       ['a leap-day date', { date: '2028-02-29' }],
-    ] as const) {
+      ['a future date', { date: '2099-12-31' }],
+      ['an old date', { date: '1900-01-01' }],
+      ...CATEGORIES.map((category): [string, Record<string, unknown>] => [`category ${category}`, { category }]),
+    ];
+
+    for (const [name, overrides] of stored) {
       test(`POST stores ${name} exactly`, { tag: '@regression' }, async ({ apiContext, cleanup }) => {
         const input = validExpense(overrides);
 
@@ -62,6 +69,23 @@ test.describe('Expenses CRUD in the database', { tag: '@db' }, () => {
         await expectExpenseRow(await getExpenseById(id), input, env.adminEmail);
       });
     }
+
+    test('POSTing the same expense twice stores two rows', { tag: '@regression' }, async ({ apiContext, cleanup }) => {
+      const input = validExpense();
+
+      const first = await apiContext.post(EXPENSES, { data: input });
+      const second = await apiContext.post(EXPENSES, { data: input });
+
+      expect(first.status()).toBe(201);
+      expect(second.status()).toBe(201);
+      const [a, b] = [await first.json(), await second.json()];
+      cleanup.track(apiContext, a.id);
+      cleanup.track(apiContext, b.id);
+      expect(b.id).not.toBe(a.id);
+      const rows = await getExpensesByTitles([input.title as string]);
+      expect(rows).toHaveLength(2);
+      for (const row of rows) await expectExpenseRow(row, input, env.adminEmail);
+    });
 
     test('PUT stores the new values and keeps the id and owner', { tag: '@regression' }, async ({ apiContext, createExpense }) => {
       const created = await createExpense();
@@ -122,6 +146,13 @@ test.describe('Expenses CRUD in the database', { tag: '@db' }, () => {
       { name: 'amount is not a number', overrides: { amount: 'abc' } },
       { name: 'amount is zero', overrides: { amount: 0 } },
       { name: 'amount is negative', overrides: { amount: -5 } },
+      { name: 'amount is -0.01', overrides: { amount: -0.01 } },
+      { name: 'amount has a thousands separator ("1,000")', overrides: { amount: '1,000' } },
+      { name: 'amount has a decimal comma ("12,50")', overrides: { amount: '12,50' } },
+      // An undefined override drops the field from the JSON body.
+      { name: 'amount is missing', overrides: { amount: undefined } },
+      { name: 'category is missing', overrides: { category: undefined } },
+      { name: 'date is missing', overrides: { date: undefined } },
       { name: 'amount is above 1000000', overrides: { amount: 1000000.01 } },
       { name: 'amount has 3 decimal places', overrides: { amount: 10.123 } },
       { name: 'category is not allowed', overrides: { category: 'Groceries' } },

@@ -1,8 +1,10 @@
 import type { Page } from '@playwright/test';
 import { test, expect, uniqueTitle } from '../../fixtures/expenses';
 import { env } from '../../fixtures/env';
+import { fixtureWithUniqueTitles, XLSX_TYPE } from '../../fixtures/xlsx';
 import { ExpensesPage } from '../../pages/ExpensesPage';
-import type { ExpenseFormValues } from '../../pages/ExpenseForm';
+import type { ExpenseField, ExpenseFormValues } from '../../pages/ExpenseForm';
+import { CATEGORIES } from '../../schemas/expense.schema';
 import { expectExpenseRow, getExpenseById, getExpensesByTitles } from '../db/db.helper';
 
 type FilledForm = Required<ExpenseFormValues>;
@@ -72,6 +74,84 @@ test.describe('expense CRUD', () => {
       await expect(expensesPage.rowByTitle(values.title)).toHaveCount(0);
       expect(await getExpensesByTitles([values.title])).toHaveLength(0);
     });
+
+    for (const { amount, shown } of [
+      { amount: '0.01', shown: '$0.01' },
+      { amount: '1000000', shown: '$1,000,000.00' },
+    ]) {
+      test(`adding amount ${amount} shows "Expense added" and a row with ${shown} @ui @regression`, async ({
+        apiContext,
+        cleanup,
+      }) => {
+        const values = formValues({ amount });
+        cleanup.trackTitles(apiContext, [values.title]);
+
+        await expensesPage.openAddForm();
+        await expensesPage.form.save(values);
+
+        await expect(expensesPage.successMessage).toHaveText('Expense added');
+        await expect(expensesPage.rowByTitle(values.title).getByTestId('expense-amount')).toHaveText(shown);
+        const rows = await getExpensesByTitles([values.title]);
+        expect(rows).toHaveLength(1);
+        await expectExpenseRow(rows[0], values, env.adminEmail);
+      });
+    }
+
+    test('the new row appears once without a page reload and the count matches the list @ui @regression', async ({
+      page,
+      apiContext,
+      cleanup,
+    }) => {
+      const values = formValues();
+      cleanup.trackTitles(apiContext, [values.title]);
+      let navigations = 0;
+      page.on('framenavigated', (frame) => {
+        if (frame === page.mainFrame()) navigations += 1;
+      });
+
+      await expensesPage.openAddForm();
+      await expensesPage.form.save(values);
+
+      await expect(expensesPage.successMessage).toHaveText('Expense added');
+      await expect(expensesPage.rowByTitle(values.title)).toHaveCount(1);
+      expect(navigations, 'main-frame navigations after submitting').toBe(0);
+      // Other workers add expenses in parallel, so compare with the rows shown, not "before + 1".
+      await expect(expensesPage.expenseCount).toHaveText(String(await expensesPage.rows.count()));
+      // The list can hide a duplicate insert that lands after it refreshed; the DB cannot.
+      expect(await getExpensesByTitles([values.title])).toHaveLength(1);
+    });
+
+    test('adding an expense with a future date shows it in the list @ui @regression', async ({
+      apiContext,
+      cleanup,
+    }) => {
+      const values = formValues({ date: '2099-12-31' });
+      cleanup.trackTitles(apiContext, [values.title]);
+
+      await expensesPage.openAddForm();
+      await expensesPage.form.save(values);
+
+      await expect(expensesPage.successMessage).toHaveText('Expense added');
+      await expect(expensesPage.rowByTitle(values.title).getByTestId('expense-date')).toHaveText('2099-12-31');
+      const rows = await getExpensesByTitles([values.title]);
+      expect(rows).toHaveLength(1);
+      await expectExpenseRow(rows[0], values, env.adminEmail);
+    });
+
+    test('adding the same expense twice shows two rows @ui @regression', async ({ apiContext, cleanup }) => {
+      const values = formValues();
+      cleanup.trackTitles(apiContext, [values.title]);
+
+      await expensesPage.openAddForm();
+      await expensesPage.form.save(values);
+      await expect(expensesPage.successMessage).toHaveText('Expense added');
+      await expensesPage.openAddForm();
+      await expensesPage.form.save(values);
+
+      await expect(expensesPage.successMessage).toHaveText('Expense added');
+      await expect(expensesPage.rowByTitle(values.title)).toHaveCount(2);
+      expect(await getExpensesByTitles([values.title])).toHaveLength(2);
+    });
   });
 
   test.describe('form validation', () => {
@@ -97,6 +177,44 @@ test.describe('expense CRUD', () => {
       await expect(expensesPage.form.fieldError('date')).toHaveText('Date is required');
       await expect(expensesPage.form.root).toBeVisible();
       await expect(expensesPage.successMessage).toBeHidden();
+    });
+
+    const required: { field: ExpenseField; message: string }[] = [
+      { field: 'title', message: 'Title is required' },
+      { field: 'amount', message: 'Amount is required' },
+      { field: 'category', message: 'Category is required' },
+      { field: 'date', message: 'Date is required' },
+    ];
+
+    for (const { field, message } of required) {
+      test(`leaving only ${field} empty shows "${message}" and stores nothing @ui @regression`, async ({
+        page,
+        apiContext,
+        cleanup,
+      }) => {
+        const values = formValues({ [field]: '' });
+        cleanup.trackTitles(apiContext, [values.title]);
+        const created = page.waitForResponse(
+          (res) => LIST_URL.test(res.url()) && res.request().method() === 'POST',
+        );
+
+        await expensesPage.form.save(values);
+
+        // The 400 proves nothing was stored when the title is the empty field.
+        expect((await created).status()).toBe(400);
+        await expect(expensesPage.form.fieldError(field)).toHaveText(message);
+        await expect(expensesPage.form.fieldErrors).toHaveCount(1);
+        await expect(expensesPage.form.formError).toHaveText('Validation failed');
+        await expect(expensesPage.form.root).toBeVisible();
+        if (values.title) expect(await getExpensesByTitles([values.title])).toHaveLength(0);
+      });
+    }
+
+    test('the category dropdown offers exactly the six categories @ui @regression', async () => {
+      await expect(expensesPage.form.category.getByRole('option')).toHaveText([
+        'Select a category',
+        ...CATEGORIES,
+      ]);
     });
 
     test('a whitespace-only title shows "Title is required" @ui @regression', async ({
@@ -311,6 +429,107 @@ test.describe('expense CRUD', () => {
       await expect(expensesPage.confirmDeleteButton(expense.id)).toBeHidden();
       await expect(expensesPage.row(expense.id)).toBeVisible();
       await expectExpenseRow(await getExpenseById(expense.id), expense, env.adminEmail);
+    });
+  });
+
+  // The message stays until the user opens Add or Edit or another message replaces it;
+  // filtering, Export and Import keep it (REQ-002).
+  test.describe('success message', () => {
+    async function addExpense(values: FilledForm): Promise<void> {
+      await expensesPage.openAddForm();
+      await expensesPage.form.save(values);
+      await expect(expensesPage.successMessage).toHaveText('Expense added');
+    }
+
+    test('"Expense added" is still shown 10 minutes later with no action @ui @regression', async ({
+      page,
+      apiContext,
+      cleanup,
+    }) => {
+      await page.clock.install();
+      await page.reload();
+      await expect(expensesPage.table).toBeVisible();
+      const values = formValues();
+      cleanup.trackTitles(apiContext, [values.title]);
+
+      await addExpense(values);
+      await page.clock.fastForward('10:00');
+
+      await expect(expensesPage.successMessage).toHaveText('Expense added');
+    });
+
+    test('opening the Add form hides the success message @ui @regression', async ({ apiContext, cleanup }) => {
+      const values = formValues();
+      cleanup.trackTitles(apiContext, [values.title]);
+      await addExpense(values);
+
+      await expensesPage.openAddForm();
+
+      await expect(expensesPage.successMessage).toBeHidden();
+    });
+
+    test('opening Edit hides the success message @ui @regression', async ({ apiContext, cleanup }) => {
+      const values = formValues();
+      cleanup.trackTitles(apiContext, [values.title]);
+      await addExpense(values);
+
+      await expensesPage.rowByTitle(values.title).getByRole('button', { name: 'Edit' }).click();
+
+      await expect(expensesPage.form.heading).toHaveText('Edit expense');
+      await expect(expensesPage.successMessage).toBeHidden();
+    });
+
+    test('an error message replaces the success message @ui @regression', async ({
+      page,
+      apiContext,
+      cleanup,
+      createExpense,
+    }) => {
+      const other = await createExpense();
+      await page.reload();
+      const values = formValues();
+      cleanup.trackTitles(apiContext, [values.title]);
+      await addExpense(values);
+      await failWith500(page, ITEM_URL, 'DELETE');
+
+      await expensesPage.deleteExpense(other.id);
+
+      await expect(expensesPage.errorMessage).toHaveText('Internal server error');
+      await expect(expensesPage.successMessage).toBeHidden();
+    });
+
+    test('filtering by category keeps the success message @ui @regression', async ({ apiContext, cleanup }) => {
+      const values = formValues({ category: 'Food' });
+      cleanup.trackTitles(apiContext, [values.title]);
+      await addExpense(values);
+
+      await expensesPage.filterByCategory('Travel');
+
+      await expect(expensesPage.successMessage).toHaveText('Expense added');
+    });
+
+    test('Export keeps the success message @ui @file @regression', async ({ apiContext, cleanup }) => {
+      const values = formValues();
+      cleanup.trackTitles(apiContext, [values.title]);
+      await addExpense(values);
+
+      const download = await expensesPage.exportFile();
+
+      expect(download.suggestedFilename()).toBe('expenses.xlsx');
+      await expect(expensesPage.successMessage).toHaveText('Expense added');
+    });
+
+    test('Import keeps the success message @ui @file @regression', async ({ apiContext, cleanup }) => {
+      const values = formValues();
+      const file = await fixtureWithUniqueTitles('valid-3-rows.xlsx');
+      cleanup.trackTitles(apiContext, [values.title, ...file.titles]);
+      await addExpense(values);
+
+      const res = await expensesPage.importFile({ ...file, mimeType: XLSX_TYPE });
+
+      expect(res.status()).toBe(201);
+      await expect(expensesPage.importMessage).toHaveText('Imported 3 expenses');
+      await expect(expensesPage.successMessage).toHaveText('Expense added');
     });
   });
 
