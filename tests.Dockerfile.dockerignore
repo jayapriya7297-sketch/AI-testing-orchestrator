@@ -1,0 +1,11 @@
+# Build context for tests.Dockerfile: test code only, never the host's node_modules or .env
+node_modules
+.env
+.env.*
+!.env.example
+.git
+.auth
+app
+reports
+playwright-report
+test-results

@@ -14,6 +14,8 @@
     "test:db": "playwright test --project=db",
     "test:db:all": "playwright test --grep @db",
     "test:smoke": "playwright test --grep @smoke",
+    "test:docker": "sh scripts/test-docker.sh",
+    "test:docker:smoke": "sh scripts/test-docker.sh --grep @smoke",
     "report": "playwright show-report",
     "report:excel": "node reporting/build-report.mts",
     "fixtures:files": "node scripts/build-fixture-files.mts",

@@ -19,6 +19,8 @@ CI (GitHub Actions, Jenkins, n8n).
   (seed SQL runs only on a fresh volume)
 - Tests: npm test · npm run test:api · test:ui · test:db · test:db:all · test:smoke · report
 - Excel report: npm run report:excel (after a test run)
+- In Docker (as CI): npm run test:docker · test:docker:smoke. Fresh DB (down -v), full
+  stack, suite + Excel report in the tests container, then down (also stops your local stack)
 - AI drafts: RUN_REVIEW=1 npx playwright test --project=review
 - Type-check: npx tsc --noEmit
 - Ports: web 5173 · api 3000 · postgres 5432 (db expenses, user qa_user)
@@ -49,6 +51,12 @@ CI (GitHub Actions, Jenkins, n8n).
   - ui: tests/ui, baseURL WEB_URL, depends on setup, uses the saved storageState
   - review: review/specs, exists only when RUN_REVIEW=1, depends on setup
 - Reports: playwright-report/, reports/junit.xml, reports/results.json
+- Docker runner: tests service in docker-compose.yml (profile test, not started by a plain
+  up), built from tests.Dockerfile (mcr.microsoft.com/playwright:v<version>-noble, Node 24;
+  bump the tag with @playwright/test) with npm ci inside; tests.Dockerfile.dockerignore
+  keeps out node_modules and .env. Uses WEB_URL http://web:5173, API_URL http://api:3000,
+  DATABASE_URL db:5432; mounts reports/, playwright-report/, test-results/ to the host.
+  scripts/test-docker.sh [playwright args] drives it and keeps the tests' exit code
 - Traces: retain-on-failure (trace.zip in test-results/ for every failed test)
 - fixtures/env.ts loads .env: WEB_URL, API_URL, DATABASE_URL, ADMIN_EMAIL,
   ADMIN_PASSWORD, USER_EMAIL, USER_PASSWORD
