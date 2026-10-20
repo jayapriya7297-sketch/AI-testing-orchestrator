@@ -1,0 +1,80 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      suite:
+        description: Test suite to run
+        type: choice
+        options: [smoke, full]
+        default: smoke
+
+permissions:
+  contents: read
+
+# One run per branch (or PR); a newer push cancels the older run.
+concurrency:
+  group: ci-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      # Push and pull_request runs are smoke; full only via "Run workflow".
+      SUITE: ${{ inputs.suite || 'smoke' }}
+    steps:
+      - uses: actions/checkout@v7
+
+      # Host Node only reads package-lock.json (Playwright image version) and writes the job
+      # summary; the tests and the Excel report run in the tests container.
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+
+      - name: Create .env from .env.example (demo values, no secrets)
+        run: cp .env.example .env
+
+      - name: Run ${{ env.SUITE }} suite in Docker
+        run: |
+          if [ "$SUITE" = full ]; then
+            npm run test:docker
+          else
+            npm run test:docker:smoke
+          fi
+
+      - name: Job summary
+        if: always()
+        run: node reporting/job-summary.mts "$SUITE" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload HTML report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: playwright-report-${{ env.SUITE }}
+          path: playwright-report/
+          retention-days: 14
+          if-no-files-found: ignore
+
+      - name: Upload reports (results.xlsx, junit.xml, results.json)
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: reports-${{ env.SUITE }}
+          path: reports/
+          retention-days: 14
+          if-no-files-found: ignore
+
+      - name: Upload traces and failure context (test-results)
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: traces-${{ env.SUITE }}
+          path: test-results/
+          retention-days: 14
+          if-no-files-found: ignore

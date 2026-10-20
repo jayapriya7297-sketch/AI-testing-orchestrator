@@ -6,13 +6,10 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import ExcelJS from 'exceljs';
-import type { JSONReport, JSONReportSpec, JSONReportSuite, JSONReportTest } from '@playwright/test/reporter';
+import type { JSONReportSpec, JSONReportTest } from '@playwright/test/reporter';
+import { collect, countStatuses, firstErrorLine, readReport, RESULTS_JSON, ROOT, statusOf, titleOf, type Status } from './results.mts';
 
-const ROOT = path.join(import.meta.dirname, '..');
-const IN = path.join(ROOT, 'reports/results.json');
 const OUT = path.join(ROOT, 'reports/results.xlsx');
-
-type Status = 'Passed' | 'Failed' | 'Expected failure' | 'Flaky' | 'Skipped';
 
 /** Cell fill (ARGB) per status. */
 const STATUS_FILL: Record<Status, string> = {
@@ -22,35 +19,6 @@ const STATUS_FILL: Record<Status, string> = {
   Flaky: 'FFF8CBAD',
   Skipped: 'FFD9D9D9',
 };
-
-type Entry = { spec: JSONReportSpec; test: JSONReportTest; describePath: string[] };
-
-/** Every test in the report, with the describe blocks it sits in. */
-function collect(suite: JSONReportSuite, describePath: string[], out: Entry[]): void {
-  for (const spec of suite.specs) {
-    for (const test of spec.tests) out.push({ spec, test, describePath });
-  }
-  // The top-level suite is the file; nested suites are describe blocks.
-  for (const child of suite.suites ?? []) collect(child, [...describePath, child.title], out);
-}
-
-function statusOf(test: JSONReportTest): Status {
-  if (test.status === 'skipped') return 'Skipped';
-  if (test.status === 'flaky') return 'Flaky';
-  if (test.status === 'unexpected') return 'Failed';
-  return test.expectedStatus === 'failed' ? 'Expected failure' : 'Passed';
-}
-
-const stripAnsi = (s: string): string => s.replace(/\x1b\[[0-9;]*m/g, '');
-
-function firstErrorLine(test: JSONReportTest): string {
-  const last = test.results.at(-1);
-  const message = last?.errors[0]?.message ?? last?.error?.message;
-  if (message) return stripAnsi(message).split('\n')[0].trim();
-  // A test.fail() test that passes has no error of its own.
-  if (test.status === 'unexpected' && test.expectedStatus === 'failed') return 'Expected to fail, but passed';
-  return '';
-}
 
 function failAnnotation(test: JSONReportTest) {
   const all = [...test.annotations, ...(test.results.at(-1)?.annotations ?? [])];
@@ -94,16 +62,13 @@ function finish(sheet: ExcelJS.Worksheet, statusKey?: string): void {
 }
 
 async function main(): Promise<void> {
-  if (!fs.existsSync(IN)) {
-    console.error(`No ${path.relative(ROOT, IN)}: run the tests first (npx playwright test).`);
+  const report = readReport();
+  if (!report) {
+    console.error(`No ${path.relative(ROOT, RESULTS_JSON)}: run the tests first (npx playwright test).`);
     process.exit(1);
   }
-  const report: JSONReport = JSON.parse(fs.readFileSync(IN, 'utf8'));
-  const entries: Entry[] = [];
-  for (const suite of report.suites) collect(suite, [], entries);
-
-  const counts: Record<Status, number> = { Passed: 0, Failed: 0, 'Expected failure': 0, Flaky: 0, Skipped: 0 };
-  for (const { test } of entries) counts[statusOf(test)]++;
+  const entries = collect(report);
+  const counts = countStatuses(entries);
 
   const workbook = new ExcelJS.Workbook();
 
@@ -157,11 +122,12 @@ async function main(): Promise<void> {
     { header: 'Retries', key: 'retries', width: 9 },
     { header: 'Error', key: 'error', width: 80 },
   ]);
-  for (const { spec, test, describePath } of entries) {
+  for (const entry of entries) {
+    const { spec, test } = entry;
     results.addRow({
       project: test.projectName,
       file: spec.file,
-      title: [...describePath, spec.title].join(' › '),
+      title: titleOf(entry),
       // The JSON reporter stores tags without the leading @.
       tags: spec.tags.map((t) => `@${t}`).join(' '),
       status: statusOf(test),
@@ -182,14 +148,15 @@ async function main(): Promise<void> {
     { header: 'Status', key: 'status', width: 16 },
     { header: 'Still fails as expected', key: 'stillFails', width: 44 },
   ]);
-  for (const { spec, test, describePath } of entries) {
+  for (const entry of entries) {
+    const { spec, test } = entry;
     const annotation = failAnnotation(test);
     if (!annotation) continue;
     const status = statusOf(test);
     bugs.addRow({
       project: test.projectName,
       where: `${spec.file}:${spec.line}`,
-      title: [...describePath, spec.title].join(' › '),
+      title: titleOf(entry),
       bug: bugId(spec, annotation.description, annotation.location),
       reason: annotation.description ?? '',
       status,
