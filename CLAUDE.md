@@ -12,6 +12,7 @@ CI (GitHub Actions, Jenkins, n8n).
 - AI: Claude Code skills incl. /generate-tests; Anthropic SDK script planned in generator/
 
 ## Setup and commands
+- Node 26 (see .nvmrc); the fixture scripts need built-in TypeScript type stripping
 - First time: cp .env.example .env (commit .env.example only, never .env)
 - Start: docker compose up -d --build
 - Reseed: docker compose down -v && docker compose up -d --build

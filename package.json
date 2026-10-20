@@ -4,6 +4,9 @@
   "private": true,
   "description": "AI-assisted test orchestration for the Expense Manager app",
   "type": "commonjs",
+  "engines": {
+    "node": ">=22.18"
+  },
   "scripts": {
     "test": "playwright test",
     "test:api": "playwright test --project=api",
