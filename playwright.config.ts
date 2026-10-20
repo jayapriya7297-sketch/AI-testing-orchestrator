@@ -14,7 +14,7 @@ export default defineConfig({
     ['json', { outputFile: 'reports/results.json' }],
   ],
   use: {
-    trace: 'on-first-retry',
+    trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
   },
   projects: [

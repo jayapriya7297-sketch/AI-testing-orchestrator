@@ -236,7 +236,7 @@ test.describe('Expenses CRUD', { tag: '@api' }, () => {
     test('POST returns 400 "Title must be a string" when title is a number', async ({ apiContext }) => {
       // App bug: validate.js coerces a non-string title to '' before the type check, so it
       // reports "Title is required" and the "Title must be a string" branch is unreachable.
-      test.fail(true, 'App bug: non-string title reports "Title is required" (validate.js)');
+      test.fail(true, 'App bug BUG-002: non-string title reports "Title is required" (validate.js)');
       const res = await apiContext.post(EXPENSES, { data: validExpense({ title: 12345 }) });
 
       expect(res.status()).toBe(400);
