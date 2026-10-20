@@ -70,6 +70,7 @@ generator/ (LLM test generation), reporting/, CI (GitHub Actions, Jenkins, n8n).
 - AI-generated drafts go to review/ only; a human moves approved specs to tests/
 - /add-page-object: page object for a UI screen
 - /write-ui-tests: UI tests for a screen or user journey
+- /write-file-tests: Excel export/import tests (UI or API) with DB checks
 <!-- - Prompt log: docs/prompts.md -->
 
 ## Working style
