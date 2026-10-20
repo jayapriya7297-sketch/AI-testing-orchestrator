@@ -53,7 +53,8 @@ CI (GitHub Actions, Jenkins, n8n).
 - Reports: playwright-report/, reports/junit.xml, reports/results.json
 - Docker runner: tests service in docker-compose.yml (profile test, not started by a plain
   up), built from tests.Dockerfile (mcr.microsoft.com/playwright:v<version>-noble, Node 24;
-  bump the tag with @playwright/test) with npm ci inside; tests.Dockerfile.dockerignore
+  <version> comes from package-lock.json via the build arg PLAYWRIGHT_VERSION, and the build
+  fails if it doesn't match the installed @playwright/test) with npm ci inside; tests.Dockerfile.dockerignore
   keeps out node_modules and .env. Uses WEB_URL http://web:5173, API_URL http://api:3000,
   DATABASE_URL db:5432; mounts reports/, playwright-report/, test-results/ to the host.
   scripts/test-docker.sh [playwright args] drives it and keeps the tests' exit code

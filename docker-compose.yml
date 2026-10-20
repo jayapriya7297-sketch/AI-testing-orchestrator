@@ -55,6 +55,9 @@ services:
     build:
       context: .
       dockerfile: tests.Dockerfile
+      args:
+        # Set by scripts/test-docker.sh from package-lock.json; passed only when set
+        - PLAYWRIGHT_VERSION
     env_file: .env
     environment:
       WEB_URL: http://web:5173
