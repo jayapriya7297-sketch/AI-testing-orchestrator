@@ -1,21 +1,15 @@
-# CLAUDE.md
-
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
-
-## Project state
-
-The system under test (Expense Manager app) lives in `app/`. The Playwright harness is at the repo root; generator/ and reporting/ are not built yet.
-
 # AI Test Orchestrator
 
 QA portfolio project: an Expense Manager app (app/) and a Playwright framework
-(repo root) testing UI, API, DB and Excel files. Planned, not built yet:
-generator/ (LLM test generation), reporting/, CI (GitHub Actions, Jenkins, n8n).
+(repo root) testing UI, API, DB and Excel files. Test generation from
+requirements runs as the /generate-tests skill. Planned, not built yet:
+generator/ (API-key script for automated generation), reporting/,
+CI (GitHub Actions, Jenkins, n8n).
 
 ## Stack
 - App: React + Vite (served by nginx), Express API (CommonJS), PostgreSQL 16, Docker Compose
 - Tests: Playwright + TypeScript; pg (DB), exceljs (Excel), ajv (schemas)
-- AI (planned): Anthropic SDK in generator/ and reporting/
+- AI: Claude Code skills incl. /generate-tests; Anthropic SDK script planned in generator/
 
 ## Setup and commands
 - First time: cp .env.example .env (commit .env.example only, never .env)
@@ -23,6 +17,7 @@ generator/ (LLM test generation), reporting/, CI (GitHub Actions, Jenkins, n8n).
 - Reseed: docker compose down -v && docker compose up -d --build
   (seed SQL runs only on a fresh volume)
 - Tests: npm test · npm run test:api · test:ui · test:db · test:db:all · test:smoke · report
+- AI drafts: RUN_REVIEW=1 npx playwright test --project=review
 - Type-check: npx tsc --noEmit
 - Ports: web 5173 · api 3000 · postgres 5432 (db expenses, user qa_user)
 
@@ -32,48 +27,70 @@ generator/ (LLM test generation), reporting/, CI (GitHub Actions, Jenkins, n8n).
 - api/ (Express, CommonJS): src/app.js wires routes; src/auth.js JWT + requireAuth;
   src/validate.js shared expense validator (CRUD and xlsx import);
   src/routes/expenses.js CRUD + /export + /import
-  - Errors: 400 {error, details:[{field, message}]} (import adds row),
-    401 {error} for missing or invalid token, 404 {error}
+  - Errors:
+    - 400 {error, details:[{field, message}]} for validation (import adds row)
+    - 400 {error} only for invalid or oversized JSON and file-level import errors
+    - 401 {error} for a missing or invalid token and for wrong login credentials
+    - 404 {error} (unknown /api routes: "Not found")
+    - 500 {error: "Internal server error"} for unhandled errors
   - Categories: Food, Travel, Office, Utilities, Entertainment, Other
 - web/ (React + Vite): nginx serves on 5173 and proxies /api to the api service.
   data-testid on every input, button, row and message: rows expense-row-{id},
-  edit-button-{id}, delete-button-{id} then confirm-delete-{id}
+  edit-button-{id}, delete-button-{id} then confirm-delete-{id};
+  form fields form-title, form-amount, form-category, form-date
 
 ## Test harness (repo root)
-- playwright.config.ts projects: setup (tests/auth.setup.ts, UI login saved to
-  .auth/user.json), api (tests/api, baseURL API_URL), db (tests/db, no baseURL: use apiContext or full URLs),
-  ui (tests/ui, baseURL WEB_URL,
-  depends on setup, uses the saved storageState)
+- playwright.config.ts projects:
+  - setup: tests/auth.setup.ts, UI login saved to .auth/user.json
+  - api: tests/api, baseURL API_URL
+  - db: tests/db, no baseURL (use apiContext or full URLs)
+  - ui: tests/ui, baseURL WEB_URL, depends on setup, uses the saved storageState
+  - review: review/specs, exists only when RUN_REVIEW=1, depends on setup
 - Reports: playwright-report/, reports/junit.xml, reports/results.json
-- fixtures/env.ts loads .env: all URLs and credentials (ADMIN_EMAIL, ADMIN_PASSWORD)
-- fixtures/api.ts exports test with an apiContext fixture (admin Bearer token)
+- fixtures/env.ts loads .env: WEB_URL, API_URL, DATABASE_URL, ADMIN_EMAIL,
+  ADMIN_PASSWORD, USER_EMAIL, USER_PASSWORD
 - UI auth is stored in localStorage (expense_token, expense_user)
 - TypeScript 7: tsconfig uses module: preserve + moduleResolution: bundler (node10 removed)
 
 ## Where things live
+
+### Rules and docs
 - Test rules: tests/CLAUDE.md. Read it before changing tests, pages/, fixtures/ or schemas/
-- fixtures/api.ts: apiContext (admin) and userApiContext (USER_EMAIL); fixtures/expenses.ts:
-  createExpense + cleanup (auto-delete) and validExpense/uniqueTitle; fixtures/files/: upload files
-- schemas/: ajv schemas (auth, expense, error) and expectSchema() in schemas/validate.ts
-- docs/bugs-found.md: app bugs found by tests (BUG-nnn); pinned with test.fail() in the specs
+- docs/bugs-found.md: app bugs found by tests (BUG-nnn), pinned with test.fail() where a
+  test covers them
+
+### Fixtures and helpers
+- fixtures/api.ts: apiContext (admin) and userApiContext (USER_EMAIL), Bearer token attached
+- fixtures/expenses.ts: createExpense + cleanup (auto-delete), validExpense, uniqueTitle,
+  and the dbConnection fixture that closes the pg pool per worker
+- fixtures/xlsx.ts: buildXlsx, uploadXlsx, readExport, expectExportMatchesList,
+  fixtureWithUniqueTitles (unique title suffix for upload files that insert rows),
+  fixtureColumn (one column of a fixtures/files workbook)
+- fixtures/files/: upload files; malformed ones are uploaded as-is
 - tests/db/db.helper.ts: read-only pg queries (getExpenseById, getExpensesByTitles,
-  getUserByEmail) and expectExpenseRow; the pool is closed per worker by the
-  dbConnection fixture in fixtures/expenses.ts. DB specs: tests/db/*.spec.ts (project db, tag @db)
-- fixtures/xlsx.ts: buildXlsx and uploadXlsx for import tests; readExport and
-  expectExportMatchesList for export checks; fixtureWithUniqueTitles (adds a unique
-  suffix to titles of a fixtures/files workbook that inserts rows)
-- scripts/build-fixture-files.mts: rebuilds the upload files in fixtures/files/
-  (npm run fixtures:files); malformed ones are uploaded as-is
-- tests/ui/expense-files.spec.ts: Export button and import form (@ui @file) with DB checks
-- requirements/expenses.xlsx: requirements REQ-001..010 (story, acceptance criteria, linked bugs,
-  priority, status), built by scripts/build-requirements.mts (npm run requirements:build)
-- Skills in .claude/skills/: /write-api-tests (API tests for an endpoint or feature),
-  /write-db-tests (DB checks on API or UI actions)
-- AI-generated drafts go to review/ only; a human moves approved specs to tests/
+  getUserByEmail) and expectExpenseRow. DB specs: tests/db/*.spec.ts (project db, tag @db)
+- schemas/: ajv schemas (auth, expense, error); expectSchema() in schemas/validate.ts
+
+### Scripts
+- npm run fixtures:files: scripts/build-fixture-files.mts rebuilds the generated upload
+  files (not malformed.xlsx or expenses.csv, which are kept by hand)
+- npm run requirements:build: scripts/build-requirements.mts rebuilds requirements/expenses.xlsx
+
+### Requirements and AI drafts
+- requirements/expenses.xlsx: REQ-001..010 (story, acceptance criteria, priority,
+  status, linked defects)
+- review/: AI-generated drafts only; a human moves approved specs to tests/
+  - review/features/<ID>.feature (Gherkin), review/specs/<ID>.spec.ts,
+    review/questions/<ID>.md (open questions), review/traceability.xlsx
+    (one row per scenario, incl. ones covered in tests/)
+
+### Skills (.claude/skills/)
+- /write-api-tests: API tests for an endpoint or feature
+- /write-db-tests: DB checks on API or UI actions
 - /add-page-object: page object for a UI screen
 - /write-ui-tests: UI tests for a screen or user journey
 - /write-file-tests: Excel export/import tests (UI or API) with DB checks
-<!-- - Prompt log: docs/prompts.md -->
+- /generate-tests: requirements → Gherkin + Playwright drafts in review/
 
 ## Working style
 - Plan before large changes; work in small, testable slices

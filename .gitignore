@@ -155,3 +155,6 @@ playwright-report/
 test-results/
 reports/
 .auth/
+
+# macOS
+.DS_Store
