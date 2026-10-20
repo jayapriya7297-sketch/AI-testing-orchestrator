@@ -43,5 +43,20 @@ export default defineConfig({
         storageState: STORAGE_STATE,
       },
     },
+    // AI-generated drafts in review/specs: only with RUN_REVIEW=1, so they never run in the normal suite.
+    ...(process.env.RUN_REVIEW === '1'
+      ? [
+          {
+            name: 'review',
+            testDir: './review/specs',
+            dependencies: ['setup'],
+            use: {
+              ...devices['Desktop Chrome'],
+              baseURL: env.webUrl,
+              storageState: STORAGE_STATE,
+            },
+          },
+        ]
+      : []),
   ],
 });
