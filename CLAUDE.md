@@ -2,9 +2,9 @@
 
 QA portfolio project: an Expense Manager app (app/) and a Playwright framework
 (repo root) testing UI, API, DB and Excel files. Test generation from
-requirements runs as the /generate-tests skill. Planned, not built yet:
-generator/ (API-key script for automated generation),
-Jenkins and n8n pipelines.
+requirements runs as the /generate-tests skill. A local Jenkins runs the nightly
+full regression. Planned, not built yet: generator/ (API-key script for automated
+generation) and the n8n pipeline.
 
 ## Stack
 - App: React + Vite (served by nginx), Express API (CommonJS), PostgreSQL 16, Docker Compose
@@ -98,6 +98,11 @@ Jenkins and n8n pipelines.
 - reporting/results.mts: shared reader for results.json (statuses, counts);
   reporting/job-summary.mts prints the Markdown summary for CI
 
+### CI
+- .github/workflows/ci.yml: GitHub Actions (see CI)
+- Jenkinsfile + jenkins/ (Dockerfile, Dockerfile.dockerignore, docker-compose.yml): local
+  Jenkins (see Jenkins)
+
 ### Requirements and AI drafts
 - requirements/expenses.xlsx: REQ-001..010 (story, acceptance criteria, priority,
   status, linked defects)
@@ -124,6 +129,27 @@ Jenkins and n8n pipelines.
 - Job summary from reporting/job-summary.mts; artifacts (14 days, uploaded even on failure):
   playwright-report-<suite>, reports-<suite>, traces-<suite> (test-results/)
 - timeout 20 min; one run per branch, a newer push cancels the older one
+
+## Jenkins (jenkins/, Jenkinsfile)
+- Local, nightly full regression; separate from the app's docker-compose.yml
+- Start: docker compose -f jenkins/docker-compose.yml up -d --build → http://localhost:8080
+  - First-time admin password:
+    docker compose -f jenkins/docker-compose.yml exec jenkins cat /var/jenkins_home/secrets/initialAdminPassword
+  - Stop: docker compose -f jenkins/docker-compose.yml down (keeps jobs, config, image cache)
+  - Reset: ... down -v (wipes Jenkins home and the dind image cache)
+- Two services on the "jenkins" network: jenkins (custom image: Docker CLI + compose +
+  buildx, Node from .nvmrc, plugins preinstalled) and jenkins-docker (docker:dind, TLS)
+  - dind mounts the same jenkins-data volume at /var/jenkins_home, so the bind mounts in
+    scripts/test-docker.sh resolve there
+  - the test stack's ports (5173/3000/5432) exist only inside dind, no clash with the dev stack
+- Job nightly-regression: Pipeline from SCM (this repo, branch main, script path Jenkinsfile)
+  - cron('H 2 * * *'), Europe/Amsterdam; runs only while Docker Desktop and Jenkins are up
+  - parameter SUITE full | smoke (cron builds: full); CI=true as in GitHub Actions
+  - npm run test:docker[:smoke] (scripts/test-docker.sh unchanged), timeout 45 min,
+    keeps 20 builds, no concurrent builds
+  - Publishes JUnit (reports/junit.xml), "Playwright report" (HTML; the CSP is relaxed in
+    jenkins/docker-compose.yml so it renders), artifacts reports/** and test-results/**
+  - post failure: placeholder for the n8n webhook (not configured yet); cleanWs last
 
 ## Working style
 - Plan before large changes; work in small, testable slices
