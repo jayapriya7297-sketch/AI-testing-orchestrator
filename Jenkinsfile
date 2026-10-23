@@ -24,6 +24,8 @@ pipeline {
   environment {
     // Passed to the tests container: retries 1 and forbidOnly (playwright.config.ts)
     CI = 'true'
+    // params.SUITE is empty on the first build (parameter not registered yet): default to full
+    SUITE = "${params.SUITE ?: 'full'}"
   }
 
   stages {
@@ -37,11 +39,13 @@ pipeline {
       steps {
         // Demo values, no secrets (as in ci.yml)
         sh 'cp .env.example .env'
+        echo "Suite: ${env.SUITE}"
+        // Fail-safe: only an explicit smoke runs smoke, anything else runs full
         sh '''
-          if [ "$SUITE" = full ]; then
-            npm run test:docker
-          else
+          if [ "$SUITE" = smoke ]; then
             npm run test:docker:smoke
+          else
+            npm run test:docker
           fi
         '''
       }
