@@ -1,0 +1,58 @@
+# Local Jenkins for the nightly regression (separate from the app's docker-compose.yml).
+# Follows the "Jenkins in Docker" guide: Jenkins + a docker:dind daemon on the "jenkins" network.
+# Start: docker compose -f jenkins/docker-compose.yml up -d --build  →  http://localhost:8080
+name: jenkins
+
+services:
+  # Docker daemon for the builds. The test stack (web 5173, api 3000, postgres 5432) publishes
+  # its ports inside this container only, so it never clashes with the local dev stack.
+  jenkins-docker:
+    image: docker:dind
+    privileged: true
+    restart: unless-stopped
+    environment:
+      DOCKER_TLS_CERTDIR: /certs
+    networks:
+      jenkins:
+        aliases: [docker]
+    volumes:
+      - jenkins-docker-certs:/certs/client
+      # Same volume and path as in jenkins: bind mounts from scripts/test-docker.sh
+      # (./reports, ./app/db/init, ...) are resolved by this daemon.
+      - jenkins-data:/var/jenkins_home
+      # Image cache (Playwright, app images) kept between nightly runs
+      - jenkins-docker-data:/var/lib/docker
+
+  jenkins:
+    build:
+      context: ..
+      dockerfile: jenkins/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      - jenkins-docker
+    ports:
+      - "8080:8080"
+    environment:
+      DOCKER_HOST: tcp://docker:2376
+      DOCKER_CERT_PATH: /certs/client
+      DOCKER_TLS_VERIFY: "1"
+      TZ: Europe/Amsterdam
+      # user.timezone: cron('H 2 * * *') runs at 02:00 Amsterdam time.
+      # Empty CSP: lets the Playwright HTML report's scripts run in publishHTML
+      # (acceptable for a local-only Jenkins, don't copy to a shared server).
+      JAVA_OPTS: >-
+        -Duser.timezone=Europe/Amsterdam
+        -Dhudson.model.DirectoryBrowserSupport.CSP=
+    networks:
+      - jenkins
+    volumes:
+      - jenkins-data:/var/jenkins_home
+      - jenkins-docker-certs:/certs/client:ro
+
+networks:
+  jenkins:
+
+volumes:
+  jenkins-data:
+  jenkins-docker-certs:
+  jenkins-docker-data:
