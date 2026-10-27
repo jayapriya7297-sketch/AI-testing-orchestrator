@@ -1,5 +1,6 @@
 # Local Jenkins for the nightly regression (separate from the app's docker-compose.yml).
-# Follows the "Jenkins in Docker" guide: Jenkins + a docker:dind daemon on the "jenkins" network.
+# Follows the "Jenkins in Docker" guide: Jenkins + a docker:dind daemon on the "jenkins" network,
+# plus n8n (failed build → Jira, email, Excel tracker; see n8n/README.md).
 # Start: docker compose -f jenkins/docker-compose.yml up -d --build  →  http://localhost:8080
 name: jenkins
 
@@ -49,6 +50,27 @@ services:
       - jenkins-data:/var/jenkins_home
       - jenkins-docker-certs:/certs/client:ro
 
+  # Failure notifications: Jenkins posts to http://n8n:5678/webhook/test-failure (post failure).
+  # Credentials (Jira, SMTP) live in n8n's own store (n8n-data), never in this repo.
+  n8n:
+    image: n8nio/n8n:2.44.7
+    restart: unless-stopped
+    # Mac only, not the LAN
+    ports:
+      - "127.0.0.1:5678:5678"
+    environment:
+      TZ: Europe/Amsterdam
+      GENERIC_TIMEZONE: Europe/Amsterdam
+      N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS: "true"
+      # The Read/Write Files from Disk node may only use the tracker folder
+      N8N_RESTRICT_FILE_ACCESS_TO: /files/tracker
+    networks:
+      - jenkins
+    volumes:
+      - n8n-data:/home/node/.n8n
+      # Excel tracker (git-ignored): n8n/tracker/test-failures.xlsx on the host
+      - ../n8n/tracker:/files/tracker
+
 networks:
   jenkins:
 
@@ -56,3 +78,4 @@ volumes:
   jenkins-data:
   jenkins-docker-certs:
   jenkins-docker-data:
+  n8n-data:

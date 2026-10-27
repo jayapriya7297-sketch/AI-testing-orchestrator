@@ -1,0 +1,42 @@
+{
+  "job": "sample",
+  "build": 101,
+  "buildUrl": "http://localhost:8080/job/nightly-regression/101/",
+  "suite": "full",
+  "resultsFound": true,
+  "counts": {
+    "passed": 60,
+    "failed": 2,
+    "unexpectedPasses": 1,
+    "expectedFailures": 3,
+    "flaky": 0,
+    "skipped": 0
+  },
+  "failures": [
+    {
+      "id": "sample0100",
+      "kind": "unexpected-pass",
+      "project": "api",
+      "location": "tests/api/expenses.spec.ts:118",
+      "title": "[sample] POST /api/expenses › BUG-001 accepts an amount with three decimals",
+      "error": "Expected to fail, but passed"
+    },
+    {
+      "id": "sample0001",
+      "kind": "failure",
+      "project": "api",
+      "location": "tests/api/expenses.spec.ts:42",
+      "title": "[sample] POST /api/expenses › rejects a negative amount",
+      "error": "Error: expect(received).toBe(expected) // Object.is equality"
+    },
+    {
+      "id": "sample0002",
+      "kind": "failure",
+      "project": "ui",
+      "location": "tests/ui/expenses.spec.ts:27",
+      "title": "[sample] Expenses page › adds an expense from the form",
+      "error": "TimeoutError: locator.click: Timeout 10000ms exceeded."
+    }
+  ],
+  "moreFailures": 0
+}
