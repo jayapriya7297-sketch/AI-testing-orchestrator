@@ -3,7 +3,7 @@
 # Usage: scripts/send-test-failure.sh [few|mass] [webhook URL]
 #   few  (default): 2 failures + 1 unexpected pass → 2 Bugs + 1 Task
 #   mass:           7 failures + 1 unexpected pass → 1 mass Bug + 1 Task
-# URL default: the production webhook (workflow active). While "Listen for test event" is on in
+# URL default: the production webhook (workflow published). While "Listen for test event" is on in
 # the editor, pass http://localhost:5678/webhook-test/test-failure instead.
 # Fixed test ids: sending the same sample again takes the "repeat" path (comments, no new issues).
 set -eu

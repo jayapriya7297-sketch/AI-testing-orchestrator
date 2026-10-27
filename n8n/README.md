@@ -87,10 +87,12 @@ Labels field on both create screens.
    (label `auto-test-mass`) + the Task.
 5. Close the `[sample]` issues afterwards. Closed issues (status category Done) are not matched again.
 
-## Activate
+## Publish
 
-Toggle the workflow to **Active** (top right). The production URL is then
-`/webhook/test-failure`, which is the default for `scripts/send-test-failure.sh`:
+n8n 2.x has draft and published workflow versions (no Active toggle). Click **Publish** (top right)
+after every change you want the production webhook to use: it runs the published version, while
+**Execute workflow** in the editor runs the draft. The production URL is `/webhook/test-failure`,
+the default for `scripts/send-test-failure.sh`:
 
 ```sh
 sh scripts/send-test-failure.sh few
