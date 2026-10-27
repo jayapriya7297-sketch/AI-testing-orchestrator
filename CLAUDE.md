@@ -3,8 +3,9 @@
 QA portfolio project: an Expense Manager app (app/) and a Playwright framework
 (repo root) testing UI, API, DB and Excel files. Test generation from
 requirements runs as the /generate-tests skill. A local Jenkins runs the nightly
-full regression. Planned, not built yet: generator/ (API-key script for automated
-generation) and the n8n pipeline.
+full regression; on failure n8n files Jira issues, emails a digest and updates an
+Excel tracker. Planned, not built yet: generator/ (API-key script for automated
+generation).
 
 ## Stack
 - App: React + Vite (served by nginx), Express API (CommonJS), PostgreSQL 16, Docker Compose
@@ -96,12 +97,20 @@ generation) and the n8n pipeline.
   reports/results.xlsx (Summary, Results, Known bugs from test.fail() annotations)
 - reports/failure-summary.md: written by /summarize-failures (reports/ is gitignored)
 - reporting/results.mts: shared reader for results.json (statuses, counts);
-  reporting/job-summary.mts prints the Markdown summary for CI
+  reporting/job-summary.mts prints the Markdown summary for CI;
+  reporting/failure-payload.mts prints the n8n webhook JSON (counts, up to 20 failed tests
+  with id = hash of file + title, kind failure | unexpected-pass; test.fail() is not a failure)
 
 ### CI
 - .github/workflows/ci.yml: GitHub Actions (see CI)
 - Jenkinsfile + jenkins/ (Dockerfile, Dockerfile.dockerignore, docker-compose.yml): local
   Jenkins (see Jenkins)
+
+### n8n (n8n/, see n8n/README.md)
+- workflows/test-failure-to-jira.json: importable, no credentials; placeholders in its Config node
+- samples/few-failures.json, samples/mass-failure.json: sample webhook payloads
+- tracker/: Excel tracker test-failures.xlsx (git-ignored, bind-mounted into n8n)
+- scripts/send-test-failure.sh [few|mass] [url]: POSTs a sample payload to the webhook
 
 ### Requirements and AI drafts
 - requirements/expenses.xlsx: REQ-001..010 (story, acceptance criteria, priority,
@@ -137,8 +146,10 @@ generation) and the n8n pipeline.
     docker compose -f jenkins/docker-compose.yml exec jenkins cat /var/jenkins_home/secrets/initialAdminPassword
   - Stop: docker compose -f jenkins/docker-compose.yml down (keeps jobs, config, image cache)
   - Reset: ... down -v (wipes Jenkins home and the dind image cache)
-- Two services on the "jenkins" network: jenkins (custom image: Docker CLI + compose +
-  buildx, Node from .nvmrc, plugins preinstalled) and jenkins-docker (docker:dind, TLS)
+- Three services on the "jenkins" network: jenkins (custom image: Docker CLI + compose +
+  buildx, Node from .nvmrc, plugins preinstalled), jenkins-docker (docker:dind, TLS) and
+  n8n (n8nio/n8n pinned, 127.0.0.1:5678, volume n8n-data, ../n8n/tracker at /files/tracker,
+  N8N_RESTRICT_FILE_ACCESS_TO=/files/tracker)
   - dind mounts the same jenkins-data volume at /var/jenkins_home, so the bind mounts in
     scripts/test-docker.sh resolve there
   - the test stack's ports (5173/3000/5432) exist only inside dind, no clash with the dev stack
@@ -149,7 +160,23 @@ generation) and the n8n pipeline.
     keeps 20 builds, no concurrent builds
   - Publishes JUnit (reports/junit.xml), "Playwright report" (HTML; the CSP is relaxed in
     jenkins/docker-compose.yml so it renders), artifacts reports/** and test-results/**
-  - post failure: placeholder for the n8n webhook (not configured yet); cleanWs last
+  - post failure: node reporting/failure-payload.mts, curl POST to the URL in the Secret text
+    credential n8n-webhook-url (http://n8n:5678/webhook/test-failure); a missing credential or
+    unreachable n8n only logs a WARNING, the build stays FAILURE; cleanWs last
+
+## n8n workflow (n8n/workflows/test-failure-to-jira.json)
+- Webhook POST /webhook/test-failure → Config (Jira site, emails, project QA,
+  massFailureThreshold 5, tracker path) → one Jira action per work item, via HTTP Request
+  nodes on the Jira Cloud REST API v3 (Jira SW Cloud credential; project key and issue type
+  names, no ids):
+  - failure (≤ threshold): open Bug with labels auto-test + at-<id>? comment "Failed again
+    in build #N" : create "[Auto] <title>" (labels auto-test, nightly, at-<id>)
+  - more than threshold real failures: one Bug "[Auto] Build #N: <count> tests failed",
+    label auto-test-mass (comment if open)
+  - unexpected-pass: Task "[Auto] Known bug may be fixed: <title>", same at-<id> de-dup
+- Then one email digest (SMTP) and one tracker row per failed test; no failed tests in
+  the payload → short email only
+- Credentials (Jira, SMTP) are created in the n8n UI only, never in files
 
 ## Working style
 - Plan before large changes; work in small, testable slices

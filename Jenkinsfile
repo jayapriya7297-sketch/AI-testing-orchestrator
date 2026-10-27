@@ -66,10 +66,24 @@ pipeline {
       archiveArtifacts artifacts: 'reports/**, test-results/**', allowEmptyArchive: true
     }
     failure {
-      // ===== n8n webhook (next step) =====
-      // TODO: POST the build result (job, build URL, SUITE, reports/results.json counts)
-      // to the n8n webhook. No URL yet; keep it in a Jenkins credential, not in this file.
-      echo 'n8n notification: not configured yet'
+      // n8n (n8n/README.md): Jira issue per failed test, email digest, Excel tracker.
+      // The webhook URL is the Secret text credential n8n-webhook-url, not in this file.
+      // A missing credential or an unreachable n8n only logs a warning: the build stays FAILURE.
+      script {
+        try {
+          withCredentials([string(credentialsId: 'n8n-webhook-url', variable: 'N8N_WEBHOOK_URL')]) {
+            sh '''
+              mkdir -p reports
+              node reporting/failure-payload.mts > reports/failure-payload.json
+              curl -fsS --max-time 20 -H 'Content-Type: application/json' \
+                --data @reports/failure-payload.json "$N8N_WEBHOOK_URL" \
+                || echo "WARNING: n8n webhook not reached; the build stays FAILURE"
+            '''
+          }
+        } catch (err) {
+          echo "WARNING: n8n notification skipped: ${err}"
+        }
+      }
     }
     cleanup {
       // Last, after failure: the n8n step can still read reports/ from the workspace

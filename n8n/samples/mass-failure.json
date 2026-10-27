@@ -1,0 +1,82 @@
+{
+  "job": "sample",
+  "build": 102,
+  "buildUrl": "http://localhost:8080/job/nightly-regression/102/",
+  "suite": "full",
+  "resultsFound": true,
+  "counts": {
+    "passed": 55,
+    "failed": 7,
+    "unexpectedPasses": 1,
+    "expectedFailures": 3,
+    "flaky": 0,
+    "skipped": 0
+  },
+  "failures": [
+    {
+      "id": "sample0100",
+      "kind": "unexpected-pass",
+      "project": "api",
+      "location": "tests/api/expenses.spec.ts:118",
+      "title": "[sample] POST /api/expenses › BUG-001 accepts an amount with three decimals",
+      "error": "Expected to fail, but passed"
+    },
+    {
+      "id": "sample0001",
+      "kind": "failure",
+      "project": "api",
+      "location": "tests/api/expenses.spec.ts:42",
+      "title": "[sample] POST /api/expenses › rejects a negative amount",
+      "error": "Error: expect(received).toBe(expected) // Object.is equality"
+    },
+    {
+      "id": "sample0002",
+      "kind": "failure",
+      "project": "ui",
+      "location": "tests/ui/expenses.spec.ts:27",
+      "title": "[sample] Expenses page › adds an expense from the form",
+      "error": "TimeoutError: locator.click: Timeout 10000ms exceeded."
+    },
+    {
+      "id": "sample0003",
+      "kind": "failure",
+      "project": "api",
+      "location": "tests/api/auth.spec.ts:12",
+      "title": "[sample] POST /api/auth/login › returns a token",
+      "error": "Error: apiRequestContext.post: connect ECONNREFUSED 172.18.0.3:3000"
+    },
+    {
+      "id": "sample0004",
+      "kind": "failure",
+      "project": "api",
+      "location": "tests/api/expenses.spec.ts:15",
+      "title": "[sample] GET /api/expenses › lists the seeded expenses",
+      "error": "Error: apiRequestContext.get: connect ECONNREFUSED 172.18.0.3:3000"
+    },
+    {
+      "id": "sample0005",
+      "kind": "failure",
+      "project": "db",
+      "location": "tests/db/expenses.db.spec.ts:20",
+      "title": "[sample] expense row matches the API response",
+      "error": "Error: connect ECONNREFUSED 172.18.0.2:5432"
+    },
+    {
+      "id": "sample0006",
+      "kind": "failure",
+      "project": "api",
+      "location": "tests/api/export.spec.ts:18",
+      "title": "[sample] GET /api/expenses/export › returns an xlsx",
+      "error": "Error: apiRequestContext.get: connect ECONNREFUSED 172.18.0.3:3000"
+    },
+    {
+      "id": "sample0007",
+      "kind": "failure",
+      "project": "ui",
+      "location": "tests/ui/login.spec.ts:9",
+      "title": "[sample] Login page › logs in with valid credentials",
+      "error": "Error: page.goto: net::ERR_CONNECTION_REFUSED at http://web:5173/login"
+    }
+  ],
+  "moreFailures": 0
+}

@@ -1,0 +1,710 @@
+{
+  "name": "Test failure to Jira",
+  "nodes": [
+    {
+      "parameters": {
+        "width": 420,
+        "height": 420,
+        "color": 4,
+        "content": "## Test failure → Jira, email, Excel\nJenkins (post failure) POSTs reporting/failure-payload.mts output here. See n8n/README.md.\n\n**Before activating:**\n1. **Config**: replace every `YOUR-...` / `example.com` placeholder.\n2. The 3 **Jira** nodes: pick your Jira Software Cloud credential.\n3. The 2 **Email** nodes: pick your SMTP credential.\n\nMore than `massFailureThreshold` real failures → one mass issue (label auto-test-mass). Unexpected passes (test.fail() that passed) → one Task each.\n\nTracker: /files/tracker/test-failures.xlsx = n8n/tracker/ on the host."
+      },
+      "id": "8e44c37f-574c-4a9f-b867-82343682213e",
+      "name": "Setup notes",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -460,
+        -260
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "test-failure",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "fdaf4bcc-6ced-4645-a666-cc081cbd7482",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ],
+      "webhookId": "1fbb5a26-e4e3-481c-b574-3282ffcde8df"
+    },
+    {
+      "parameters": {
+        "mode": "manual",
+        "assignments": {
+          "assignments": [
+            {
+              "id": "8d94f660-1276-4b6c-a58f-2889461dea34",
+              "name": "jiraSiteUrl",
+              "value": "https://YOUR-SITE.atlassian.net",
+              "type": "string"
+            },
+            {
+              "id": "36f6c8dd-87eb-466f-9f61-6fff7aff3d13",
+              "name": "jiraProject",
+              "value": "QA",
+              "type": "string"
+            },
+            {
+              "id": "68aaab53-bcbf-491b-87bf-e5a4d47a70d0",
+              "name": "emailTo",
+              "value": "YOUR-EMAIL@example.com",
+              "type": "string"
+            },
+            {
+              "id": "d2a96925-a402-4ae9-9703-e1ffcc9111b2",
+              "name": "emailFrom",
+              "value": "YOUR-SENDER@example.com",
+              "type": "string"
+            },
+            {
+              "id": "4b5f0d06-4856-4a96-a507-015b9eff9113",
+              "name": "massFailureThreshold",
+              "value": 5,
+              "type": "number"
+            },
+            {
+              "id": "92b1f46d-f5cb-4d6a-9cfb-80e5fca4b320",
+              "name": "trackerFile",
+              "value": "/files/tracker/test-failures.xlsx",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "id": "e4c03f3d-861c-4af8-b56a-a91352f3154d",
+      "name": "Config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        220,
+        0
+      ],
+      "notes": "PLACEHOLDERS: set jiraSiteUrl, emailTo and emailFrom before activating",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "085b504c-6d7b-4e66-af79-92d218b98218",
+              "leftValue": "={{ $json.body.failures.length }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "d5801721-2390-462a-b990-f74c697549a2",
+      "name": "Has failed tests?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        440,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "={{ $('Config').first().json.emailFrom }}",
+        "toEmail": "={{ $('Config').first().json.emailTo }}",
+        "subject": "={{ '[' + $json.body.job + '] Build #' + $json.body.build + ' failed without failed tests' }}",
+        "emailFormat": "html",
+        "html": "={{ '<p>' + $json.body.job + ' build <a href=\"' + $json.body.buildUrl + '\">#' + $json.body.build + '</a> (suite ' + $json.body.suite + ') failed, but no failed tests were reported. ' + ($json.body.resultsFound ? 'Look for run errors (setup, timeout) in the build log.' : 'There was no results.json: the build failed before the tests ran (stack, build or Docker problem).') + '</p>' }}",
+        "options": {}
+      },
+      "id": "47d71b4c-7051-44fc-b836-95bcac55afb4",
+      "name": "Email: no failed tests",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        660,
+        220
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// One work item per Jira action: search open issue by label → comment (repeat) or create (new).\n// More than massFailureThreshold real failures → one mass issue instead of one bug per test.\n// Unexpected passes (test.fail() that passed) always get their own Task.\nconst cfg = $('Config').first().json;\nconst p = $('Webhook').first().json.body;\nconst project = cfg.jiraProject;\nconst threshold = Number(cfg.massFailureThreshold);\n\n// Jira Cloud REST v3 wants Atlassian Document Format for descriptions and comments\nconst text = (part) =>\n  typeof part === 'string'\n    ? { type: 'text', text: part }\n    : { type: 'text', text: part.text, marks: [{ type: 'link', attrs: { href: part.href } }] };\nconst para = (...parts) => ({ type: 'paragraph', content: parts.filter(Boolean).map(text) });\nconst doc = (...paragraphs) => ({ type: 'doc', version: 1, content: paragraphs });\n\nconst buildLink = p.buildUrl ? { text: `build #${p.build}`, href: p.buildUrl } : `build #${p.build}`;\nconst jql = (issueType, labels) =>\n  [`project = \"${project}\"`, `issuetype = \"${issueType}\"`, ...labels.map((l) => `labels = \"${l}\"`), 'statusCategory != Done'].join(' AND ');\nconst summary = (s) => (s.length > 250 ? `${s.slice(0, 249)}…` : s);\nconst testParas = (t) => [para(`Test: ${t.title}`), para(`Location: ${t.location} (project ${t.project})`), para(`Error: ${t.error || '(none)'}`)];\n\nconst item = (type, issueType, title, tests, labels, searchLabels, description, comment) => ({\n  type,\n  title,\n  tests,\n  jql: jql(issueType, searchLabels),\n  create: { fields: { project: { key: project }, issuetype: { name: issueType }, summary: summary(title), description, labels } },\n  comment: { body: comment },\n});\n\nconst failures = p.failures.filter((t) => t.kind === 'failure');\nconst unexpectedPasses = p.failures.filter((t) => t.kind === 'unexpected-pass');\nconst items = [];\n\nfor (const t of unexpectedPasses) {\n  items.push(\n    item(\n      'task', 'Task', `[Auto] Known bug may be fixed: ${t.title}`, [t],\n      ['auto-test', 'nightly', `at-${t.id}`], ['auto-test', `at-${t.id}`],\n      doc(\n        para('This test is pinned with test.fail() as a known app bug, but it passed in ', buildLink, '.'),\n        para(`Test: ${t.title}`),\n        para(`Location: ${t.location} (project ${t.project})`),\n        para(`Suite: ${p.suite}`),\n        para('To do: verify the bug is fixed in the app, then remove test.fail() from the test and mark the bug fixed in docs/bugs-found.md.'),\n      ),\n      doc(para('Still passing in ', buildLink, '.')),\n    ),\n  );\n}\n\nif (p.counts.failed > threshold) {\n  const notListed = p.counts.failed - failures.length;\n  const list = [\n    ...failures.map((t) => para(`${t.title} (${t.location}): ${t.error || '(no error)'}`)),\n    ...(notListed > 0 ? [para(`+ ${notListed} more, see the build.`)] : []),\n  ];\n  items.push(\n    item(\n      'mass', 'Bug', `[Auto] Build #${p.build}: ${p.counts.failed} tests failed`, failures,\n      ['auto-test', 'auto-test-mass', 'nightly'], ['auto-test-mass'],\n      doc(\n        para(`${p.counts.failed} tests failed in `, buildLink, ` (suite ${p.suite}).`),\n        para(`More than ${threshold} failures: one issue instead of one per test. Likely an environment or shared cause.`),\n        ...list,\n      ),\n      doc(para('Failed again in ', buildLink, `: ${p.counts.failed} tests failed.`), ...list),\n    ),\n  );\n} else {\n  for (const t of failures) {\n    items.push(\n      item(\n        'bug', 'Bug', `[Auto] ${t.title}`, [t],\n        ['auto-test', 'nightly', `at-${t.id}`], ['auto-test', `at-${t.id}`],\n        doc(...testParas(t), para(`Suite: ${p.suite}`), para('First failed in ', buildLink, '.')),\n        doc(para('Failed again in ', buildLink, `: ${t.error || '(no error)'}`)),\n      ),\n    );\n  }\n}\n\nreturn items.map((json) => ({ json }));\n"
+      },
+      "id": "bf7b773b-2a87-4cae-930e-c690d3a63665",
+      "name": "Plan Jira actions",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        660,
+        -20
+      ]
+    },
+    {
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      },
+      "id": "52670f52-ec8d-49fd-a24f-45075e1c6870",
+      "name": "Loop Over Items",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        880,
+        -20
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Config').first().json.jiraSiteUrl }}/rest/api/3/search/jql",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "jiraSoftwareCloudApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ jql: $json.jql, maxResults: 1, fields: ['key'] }) }}",
+        "options": {}
+      },
+      "id": "da5daf64-5310-40eb-95ac-3db18871f205",
+      "name": "Jira: search open issue",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1100,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "b4cd07ab-31fd-48a3-8e22-a9dd715ee1b1",
+              "leftValue": "={{ $json.issues.length }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "8979676b-8acc-46b0-b2fe-8ee693ded3f9",
+      "name": "Open issue found?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1320,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Config').first().json.jiraSiteUrl }}/rest/api/3/issue/{{ $json.issues[0].key }}/comment",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "jiraSoftwareCloudApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($('Loop Over Items').item.json.comment) }}",
+        "options": {}
+      },
+      "id": "0a4aac18-97ba-4862-b75c-914ae3daa10d",
+      "name": "Jira: add comment",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1540,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Config').first().json.jiraSiteUrl }}/rest/api/3/issue",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "jiraSoftwareCloudApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($('Loop Over Items').item.json.create) }}",
+        "options": {}
+      },
+      "id": "a2d9382c-f121-4642-8ac9-d2481d54b187",
+      "name": "Jira: create issue",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1540,
+        180
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "manual",
+        "assignments": {
+          "assignments": [
+            {
+              "id": "d94dce42-e566-4343-a656-4cd36e23b541",
+              "name": "type",
+              "value": "={{ $('Loop Over Items').item.json.type }}",
+              "type": "string"
+            },
+            {
+              "id": "872c8266-9d4e-4494-a1fa-286479794844",
+              "name": "title",
+              "value": "={{ $('Loop Over Items').item.json.title }}",
+              "type": "string"
+            },
+            {
+              "id": "e194a308-f1d3-4601-80d9-ca1c95b8671e",
+              "name": "tests",
+              "value": "={{ $('Loop Over Items').item.json.tests }}",
+              "type": "array"
+            },
+            {
+              "id": "3dcc84a2-c79c-4091-b663-5df502235bee",
+              "name": "jiraKey",
+              "value": "={{ $('Jira: search open issue').item.json.issues[0].key }}",
+              "type": "string"
+            },
+            {
+              "id": "428d0ca8-6a68-4c3e-86f2-af250eec75d6",
+              "name": "status",
+              "value": "repeat",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": false,
+        "options": {}
+      },
+      "id": "7a0225af-1a42-4856-a4fb-22b03ee0d420",
+      "name": "Result: repeat",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1760,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "manual",
+        "assignments": {
+          "assignments": [
+            {
+              "id": "77c7ec03-f82d-4561-9afe-383994c9a874",
+              "name": "type",
+              "value": "={{ $('Loop Over Items').item.json.type }}",
+              "type": "string"
+            },
+            {
+              "id": "7f1e97ff-b2e8-4f03-9491-808add38df68",
+              "name": "title",
+              "value": "={{ $('Loop Over Items').item.json.title }}",
+              "type": "string"
+            },
+            {
+              "id": "28fc3aac-a3c6-4837-aa0c-f17b338d95ed",
+              "name": "tests",
+              "value": "={{ $('Loop Over Items').item.json.tests }}",
+              "type": "array"
+            },
+            {
+              "id": "548bd11b-7469-41c0-bac9-05279f083d1f",
+              "name": "jiraKey",
+              "value": "={{ $json.key }}",
+              "type": "string"
+            },
+            {
+              "id": "4a1a8179-2eda-45e3-913a-0b670afcf1e1",
+              "name": "status",
+              "value": "new",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": false,
+        "options": {}
+      },
+      "id": "d4a7ae87-f67d-4f7a-9da7-222648e9bf25",
+      "name": "Result: new",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1760,
+        180
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "4cbf32cf-a684-49ba-b1f0-d21a7dccaa57",
+      "name": "Loop results",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1100,
+        -220
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// One email for the build: mass issue or new/repeat bugs, plus unexpected passes separately.\nconst cfg = $('Config').first().json;\nconst p = $('Webhook').first().json.body;\nconst results = $input.all().map((i) => i.json);\n\nconst esc = (s) => String(s).replace(/[&<>\"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '\"': '&quot;' })[c]);\nconst issue = (key) => `<a href=\"${esc(cfg.jiraSiteUrl)}/browse/${esc(key)}\">${esc(key)}</a>`;\nconst build = p.buildUrl ? `<a href=\"${esc(p.buildUrl)}\">#${p.build}</a>` : `#${p.build}`;\nconst testLine = (t) => `${esc(t.title)} <code>${esc(t.location)}</code>${t.error ? `: ${esc(t.error)}` : ''}`;\nconst section = (heading, rows) => (rows.length ? `<h3>${heading}</h3><ul>${rows.map((r) => `<li>${r}</li>`).join('')}</ul>` : '');\nconst c = p.counts;\n\nconst html = [\n  `<p>${esc(p.job)} build ${build} (suite ${esc(p.suite)}) failed: ${c.failed} failed, ${c.unexpectedPasses} unexpected passes, ` +\n    `${c.expectedFailures} expected failures, ${c.flaky} flaky, ${c.passed} passed.</p>`,\n];\n\nconst mass = results.find((r) => r.type === 'mass');\nif (mass) {\n  const notListed = c.failed - mass.tests.length;\n  html.push(\n    `<h3>Mass failure: ${c.failed} tests failed</h3>`,\n    `<p>More than ${esc(cfg.massFailureThreshold)} failures, so one issue instead of one per test: ` +\n      `${issue(mass.jiraKey)} (${mass.status === 'new' ? 'new' : 'updated'}).</p>`,\n    `<ul>${mass.tests.map((t) => `<li>${testLine(t)}</li>`).join('')}${notListed > 0 ? `<li>+ ${notListed} more, see the build</li>` : ''}</ul>`,\n  );\n} else {\n  const bugs = results.filter((r) => r.type === 'bug');\n  const row = (r) => `${issue(r.jiraKey)} ${testLine(r.tests[0])}`;\n  html.push(\n    section('New bugs', bugs.filter((r) => r.status === 'new').map(row)),\n    section('Failed again (comment added)', bugs.filter((r) => r.status === 'repeat').map(row)),\n  );\n}\n\nconst tasks = results.filter((r) => r.type === 'task');\nhtml.push(\n  section(\n    'Known bugs that may be fixed (unexpected passes)',\n    tasks.map((r) => `${issue(r.jiraKey)} ${r.status === 'new' ? '(new task)' : '(still passing)'} ${testLine(r.tests[0])}`),\n  ),\n);\nif (p.moreFailures > 0 && !mass) html.push(`<p>+ ${p.moreFailures} more failed tests, see the build.</p>`);\n\nconst subject =\n  `[${p.job}] Build #${p.build} failed: ${c.failed} failed` + (c.unexpectedPasses ? `, ${c.unexpectedPasses} unexpected passes` : '');\nreturn [{ json: { subject, html: html.filter(Boolean).join('\\n') } }];\n"
+      },
+      "id": "6425ca38-acce-443e-9772-b4068135118d",
+      "name": "Build digest",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1320,
+        -320
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "={{ $('Config').first().json.emailFrom }}",
+        "toEmail": "={{ $('Config').first().json.emailTo }}",
+        "subject": "={{ $json.subject }}",
+        "emailFormat": "html",
+        "html": "={{ $json.html }}",
+        "options": {}
+      },
+      "id": "986ea0dd-0a93-40da-9664-fc75e2a1c93d",
+      "name": "Email: digest",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        1540,
+        -320
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "read",
+        "fileSelector": "={{ $('Config').first().json.trackerFile }}",
+        "options": {}
+      },
+      "id": "72b95432-1234-4a51-acb6-2a54a842825b",
+      "name": "Tracker: read file",
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [
+        1320,
+        -140
+      ],
+      "executeOnce": true,
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput",
+      "notes": "No file on the first run: continues with no rows"
+    },
+    {
+      "parameters": {
+        "operation": "xlsx",
+        "binaryPropertyName": "data",
+        "options": {}
+      },
+      "id": "d4f2d840-0cdc-43ea-ab5e-ef871f37199e",
+      "name": "Tracker: extract rows",
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1,
+      "position": [
+        1540,
+        -140
+      ],
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Existing tracker rows (none on the first run: the read/extract errors are skipped) + one row per failed test.\nconst p = $('Webhook').first().json.body;\nconst old = $input.all().map((i) => i.json).filter((r) => r.Date !== undefined && r.error === undefined);\nconst date = $now.toFormat('yyyy-LL-dd HH:mm');\nconst rows = $('Loop results').all().flatMap(({ json: r }) =>\n  r.tests.map((t) => ({\n    Date: date,\n    Job: p.job,\n    Build: p.build,\n    Suite: p.suite,\n    Test: t.title,\n    Location: t.location,\n    Kind: t.kind,\n    'Jira key': r.jiraKey,\n    'New/Repeat': r.status === 'new' ? 'New' : 'Repeat',\n  })),\n);\nreturn [...old, ...rows].map((json) => ({ json }));\n"
+      },
+      "id": "2ad08fba-e22e-46f7-bcb3-61e1e7a762c6",
+      "name": "Tracker: append rows",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1760,
+        -140
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "xlsx",
+        "binaryPropertyName": "data",
+        "options": {
+          "fileName": "test-failures.xlsx",
+          "sheetName": "Failures",
+          "headerRow": true
+        }
+      },
+      "id": "f5409da6-9999-4cc3-a0d0-73be0bebfb7f",
+      "name": "Tracker: to xlsx",
+      "type": "n8n-nodes-base.convertToFile",
+      "typeVersion": 1.1,
+      "position": [
+        1980,
+        -140
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "write",
+        "fileName": "={{ $('Config').first().json.trackerFile }}",
+        "dataPropertyName": "data",
+        "options": {}
+      },
+      "id": "2806a676-ded4-4be2-a5a9-b1d2ba11e082",
+      "name": "Tracker: write file",
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [
+        2200,
+        -140
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Config": {
+      "main": [
+        [
+          {
+            "node": "Has failed tests?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has failed tests?": {
+      "main": [
+        [
+          {
+            "node": "Plan Jira actions",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Email: no failed tests",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Plan Jira actions": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Over Items": {
+      "main": [
+        [
+          {
+            "node": "Loop results",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Jira: search open issue",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Jira: search open issue": {
+      "main": [
+        [
+          {
+            "node": "Open issue found?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Open issue found?": {
+      "main": [
+        [
+          {
+            "node": "Jira: add comment",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Jira: create issue",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Jira: add comment": {
+      "main": [
+        [
+          {
+            "node": "Result: repeat",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Jira: create issue": {
+      "main": [
+        [
+          {
+            "node": "Result: new",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Result: repeat": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Result: new": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop results": {
+      "main": [
+        [
+          {
+            "node": "Build digest",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Tracker: read file",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build digest": {
+      "main": [
+        [
+          {
+            "node": "Email: digest",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tracker: read file": {
+      "main": [
+        [
+          {
+            "node": "Tracker: extract rows",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tracker: extract rows": {
+      "main": [
+        [
+          {
+            "node": "Tracker: append rows",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tracker: append rows": {
+      "main": [
+        [
+          {
+            "node": "Tracker: to xlsx",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tracker: to xlsx": {
+      "main": [
+        [
+          {
+            "node": "Tracker: write file",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {}
+}
