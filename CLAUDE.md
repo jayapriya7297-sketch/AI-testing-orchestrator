@@ -165,7 +165,8 @@ generation).
     unreachable n8n only logs a WARNING, the build stays FAILURE; cleanWs last
 
 ## n8n workflow (n8n/workflows/test-failure-to-jira.json)
-- Webhook POST /webhook/test-failure → Config (Jira site, emails, project QA,
+- Webhook POST /webhook/test-failure → Config (Jira site, emails, jiraProject = Jira project key, default KAN,
+  bugIssueType / taskIssueType = work type names, default Bug / Task,
   massFailureThreshold 5, tracker path) → one Jira action per work item, via HTTP Request
   nodes on the Jira Cloud REST API v3 (Jira SW Cloud credential; project key and issue type
   names, no ids):

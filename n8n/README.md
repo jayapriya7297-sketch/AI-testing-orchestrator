@@ -5,7 +5,7 @@ When the nightly Jenkins build fails, `post { failure }` in the Jenkinsfile runs
 `workflows/test-failure-to-jira.json` then:
 
 1. **Few failures** (≤ `massFailureThreshold`, default 5): one Jira **Bug** per failed test.
-   It first searches for an open Bug in project QA with labels `auto-test` and `at-<id>`
+   It first searches for an open Bug in the Jira project (`jiraProject` in Config) with labels `auto-test` and `at-<id>`
    (id = hash of file + title, stable across builds). If one is found it adds a comment
    "Failed again in build #N", otherwise it creates `[Auto] <title>` with the error,
    file:line, suite and build link (labels `auto-test`, `nightly`, `at-<id>`).
@@ -43,7 +43,12 @@ execution history are kept in the `n8n-data` volume. `down -v` wipes them.
 2. Open the **Config** node and replace the placeholders:
    - `jiraSiteUrl`: `https://YOUR-SITE.atlassian.net`, your Jira Cloud site (no trailing slash)
    - `emailTo`, `emailFrom`: recipients (comma-separated) and the sender address
-   - `jiraProject` (`QA`), `massFailureThreshold` (`5`), `trackerFile`: keep or change
+   - `jiraProject`: your Jira project **key** (default `KAN`; the key from Projects › Key, not the name).
+     Every search, comment and create uses it; nothing else in the workflow names a project.
+   - `bugIssueType` (default `Bug`), `taskIssueType` (default `Task`): the exact work type names
+     in that project (Project settings › Work types / Issue types). Used in the JQL search and the
+     create body; a wrong name gives Jira 400 "Specify a valid issue type".
+   - `massFailureThreshold` (`5`), `trackerFile`: keep or change
 3. Create the credentials below and select them in the nodes that show a warning.
 
 ## Credentials (created in the n8n UI)
@@ -57,9 +62,10 @@ execution history are kept in the `n8n-data` volume. `down -v` wipes them.
 The Jira nodes are HTTP Request nodes calling the Jira Cloud REST API v3 with this credential
 (Authentication: Predefined credential type › Jira SW Cloud API). The built-in Jira node needs
 numeric project and issue type ids picked from a list after the credential exists. With the REST API
-the importable file can use project key `QA` and issue type names `Bug` and `Task` directly.
+the importable file can use the project key and issue type names from Config directly.
 
-Jira project `QA` needs issue types **Bug** and **Task** and the Labels field on both create screens.
+The Jira project (`jiraProject`) needs the work types named in `bugIssueType` and `taskIssueType`, with the
+Labels field on both create screens.
 
 **SMTP**: used by `Email: digest` and `Email: no failed tests`.
 - Gmail: host `smtp.gmail.com`, port `465`, SSL/TLS on, user = your Gmail address, password = an
