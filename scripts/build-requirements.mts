@@ -114,7 +114,7 @@ const REQUIREMENTS: Requirement[] = [
     ],
     priority: 'High',
     status: 'Implemented',
-    defects: ['BUG-001', 'BUG-005'],
+    defects: ['BUG-001 (fixed)', 'BUG-005'],
   },
   {
     id: 'REQ-009',
