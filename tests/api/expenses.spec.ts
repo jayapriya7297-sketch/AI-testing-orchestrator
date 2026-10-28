@@ -1,4 +1,5 @@
 import ExcelJS from 'exceljs';
+import type { APIResponse } from '@playwright/test';
 import { test, expect, validExpense, uniqueTitle } from '../../fixtures/expenses';
 import { env } from '../../fixtures/env';
 import { errorSchema, validationErrorSchema } from '../../schemas/error.schema';
@@ -8,11 +9,16 @@ import { expectSchema } from '../../schemas/validate';
 const EXPENSES = '/api/expenses';
 const UNKNOWN_ID = 999999999;
 
-// Known app bug (IDOR / OWASP API1 BOLA): routes/expenses.js looks up, updates and
-// deletes by id only and never compares created_by with req.user, so any logged-in
-// user can read, edit and delete every other user's expenses. These tests assert the
-// secure behaviour and are marked test.fail() until the API enforces ownership.
-const IDOR_BUG = 'App bug BUG-001: no ownership check on /api/expenses (IDOR); see comment at top of file';
+// Ids in column 1 of an /export workbook, header row skipped.
+async function exportedIds(res: APIResponse): Promise<unknown[]> {
+  const workbook = new ExcelJS.Workbook();
+  await workbook.xlsx.load((await res.body()) as unknown as ExcelJS.Buffer);
+  const ids: unknown[] = [];
+  workbook.worksheets[0].eachRow((row, n) => {
+    if (n > 1) ids.push(row.getCell(1).value);
+  });
+  return ids;
+}
 
 test.describe('Expenses CRUD', { tag: '@api' }, () => {
   test.describe('happy path', () => {
@@ -316,7 +322,9 @@ test.describe('Expenses CRUD', { tag: '@api' }, () => {
     }
   });
 
-  test.describe('another user\'s expense', { tag: '@regression' }, () => {
+  // Ownership (REQ-008): a regular user gets 404 for another user's expense, so its
+  // existence isn't revealed; the admin can read it but gets 403 on edit and delete.
+  test.describe('a regular user and another user\'s expense', { tag: '@regression' }, () => {
     test('a user can GET their own expense (control)', async ({ userApiContext, createExpense }) => {
       const own = await createExpense({}, userApiContext);
 
@@ -326,65 +334,134 @@ test.describe('Expenses CRUD', { tag: '@api' }, () => {
       expect(await res.json()).toMatchObject({ id: own.id, created_by: env.userEmail });
     });
 
-    test('GET returns 403 or 404 for another user\'s expense', async ({ userApiContext, createExpense }) => {
-      test.fail(true, IDOR_BUG);
+    test('GET returns 404 for another user\'s expense', async ({ userApiContext, createExpense }) => {
       const adminExpense = await createExpense();
 
       const res = await userApiContext.get(`${EXPENSES}/${adminExpense.id}`);
 
-      expect([403, 404]).toContain(res.status());
+      expect(res.status()).toBe(404);
+      const body = await res.json();
+      expectSchema(body, errorSchema);
+      expect(body.error).toBe('Expense not found');
     });
 
-    test('PUT returns 403 or 404 for another user\'s expense and leaves it unchanged', async ({ apiContext, userApiContext, createExpense }) => {
-      test.fail(true, IDOR_BUG);
+    test('PUT returns 404 for another user\'s expense and leaves it unchanged', async ({ apiContext, userApiContext, createExpense }) => {
       const adminExpense = await createExpense();
 
       const res = await userApiContext.put(`${EXPENSES}/${adminExpense.id}`, {
         data: validExpense({ title: 'hijacked', amount: 1 }),
       });
 
-      expect([403, 404]).toContain(res.status());
+      expect(res.status()).toBe(404);
+      const body = await res.json();
+      expectSchema(body, errorSchema);
+      expect(body.error).toBe('Expense not found');
       const reread = await apiContext.get(`${EXPENSES}/${adminExpense.id}`);
       expect(await reread.json()).toEqual(adminExpense);
     });
 
-    test('DELETE returns 403 or 404 for another user\'s expense and keeps it', async ({ apiContext, userApiContext, createExpense }) => {
-      test.fail(true, IDOR_BUG);
+    test('DELETE returns 404 for another user\'s expense and keeps it', async ({ apiContext, userApiContext, createExpense }) => {
       const adminExpense = await createExpense();
 
       const res = await userApiContext.delete(`${EXPENSES}/${adminExpense.id}`);
 
-      expect([403, 404]).toContain(res.status());
+      expect(res.status()).toBe(404);
+      const body = await res.json();
+      expectSchema(body, errorSchema);
+      expect(body.error).toBe('Expense not found');
       const reread = await apiContext.get(`${EXPENSES}/${adminExpense.id}`);
       expect(reread.status()).toBe(200);
     });
 
     test('GET list does not include another user\'s expense', async ({ userApiContext, createExpense }) => {
-      test.fail(true, IDOR_BUG);
       const adminExpense = await createExpense();
 
       const res = await userApiContext.get(EXPENSES);
 
       expect(res.status()).toBe(200);
       const body = (await res.json()) as Expense[];
+      expectSchema(body, expenseListSchema);
       expect(body.every((e) => e.created_by === env.userEmail)).toBe(true);
       expect(body.map((e) => e.id)).not.toContain(adminExpense.id);
     });
 
     test('export does not include another user\'s expense', { tag: '@file' }, async ({ userApiContext, createExpense }) => {
-      test.fail(true, IDOR_BUG);
       const adminExpense = await createExpense();
 
       const res = await userApiContext.get(`${EXPENSES}/export`);
 
       expect(res.status()).toBe(200);
-      const workbook = new ExcelJS.Workbook();
-      await workbook.xlsx.load((await res.body()) as unknown as ExcelJS.Buffer);
-      const ids: unknown[] = [];
-      workbook.worksheets[0].eachRow((row, n) => {
-        if (n > 1) ids.push(row.getCell(1).value);
+      expect(await exportedIds(res)).not.toContain(adminExpense.id);
+    });
+  });
+
+  test.describe('the admin and another user\'s expense', { tag: '@regression' }, () => {
+    test('GET returns 200 with another user\'s expense', async ({ apiContext, userApiContext, createExpense }) => {
+      const userExpense = await createExpense({}, userApiContext);
+
+      const res = await apiContext.get(`${EXPENSES}/${userExpense.id}`);
+
+      expect(res.status()).toBe(200);
+      const body = await res.json();
+      expectSchema(body, expenseSchema);
+      expect(body).toEqual({ ...userExpense, created_by: env.userEmail });
+    });
+
+    test('GET list includes another user\'s expense', async ({ apiContext, userApiContext, createExpense }) => {
+      const userExpense = await createExpense({}, userApiContext);
+
+      const res = await apiContext.get(EXPENSES);
+
+      expect(res.status()).toBe(200);
+      const body = (await res.json()) as Expense[];
+      expectSchema(body, expenseListSchema);
+      expect(body.find((e) => e.id === userExpense.id)).toEqual({ ...userExpense, created_by: env.userEmail });
+      expect(body.some((e) => e.created_by === env.adminEmail)).toBe(true);
+    });
+
+    test('export includes another user\'s expense', { tag: '@file' }, async ({ apiContext, userApiContext, createExpense }) => {
+      const userExpense = await createExpense({}, userApiContext);
+
+      const res = await apiContext.get(`${EXPENSES}/export`);
+
+      expect(res.status()).toBe(200);
+      expect(await exportedIds(res)).toContain(userExpense.id);
+    });
+
+    test('PUT returns 403 for another user\'s expense and leaves it unchanged', async ({ apiContext, userApiContext, createExpense }) => {
+      const userExpense = await createExpense({}, userApiContext);
+
+      const res = await apiContext.put(`${EXPENSES}/${userExpense.id}`, {
+        data: validExpense({ title: 'changed by admin', amount: 1 }),
       });
-      expect(ids).not.toContain(adminExpense.id);
+
+      expect(res.status()).toBe(403);
+      const body = await res.json();
+      expectSchema(body, errorSchema);
+      expect(body.error).toBe('You can only edit or delete your own expenses');
+      const reread = await userApiContext.get(`${EXPENSES}/${userExpense.id}`);
+      expect(await reread.json()).toEqual(userExpense);
+    });
+
+    test('DELETE returns 403 for another user\'s expense and keeps it', async ({ apiContext, userApiContext, createExpense }) => {
+      const userExpense = await createExpense({}, userApiContext);
+
+      const res = await apiContext.delete(`${EXPENSES}/${userExpense.id}`);
+
+      expect(res.status()).toBe(403);
+      const body = await res.json();
+      expectSchema(body, errorSchema);
+      expect(body.error).toBe('You can only edit or delete your own expenses');
+      const reread = await userApiContext.get(`${EXPENSES}/${userExpense.id}`);
+      expect(reread.status()).toBe(200);
+    });
+
+    test('PUT and DELETE return 404 for an unknown id (not 403)', async ({ apiContext }) => {
+      const put = await apiContext.put(`${EXPENSES}/${UNKNOWN_ID}`, { data: validExpense() });
+      const del = await apiContext.delete(`${EXPENSES}/${UNKNOWN_ID}`);
+
+      expect(put.status()).toBe(404);
+      expect(del.status()).toBe(404);
     });
   });
 });

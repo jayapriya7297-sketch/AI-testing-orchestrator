@@ -11,7 +11,6 @@ import { expenseListSchema, type Expense } from '../../schemas/expense.schema';
 import { expectSchema } from '../../schemas/validate';
 
 const EXPENSES = '/api/expenses';
-const IDOR_BUG = 'App bug BUG-001: no ownership check on /api/expenses (IDOR), docs/bugs-found.md';
 
 test.describe('REQ-008 Data privacy', { tag: ['@generated', '@REQ-008'] }, () => {
   test.describe('UI as the regular user', { tag: '@ui' }, () => {
@@ -48,7 +47,6 @@ test.describe('REQ-008 Data privacy', { tag: ['@generated', '@REQ-008'] }, () =>
       page,
       createExpense,
     }) => {
-      test.fail(true, IDOR_BUG);
       const adminExpense = await createExpense();
       await loginAsUser(page);
 
@@ -60,12 +58,29 @@ test.describe('REQ-008 Data privacy', { tag: ['@generated', '@REQ-008'] }, () =>
     });
   });
 
+  test.describe('UI as the admin', { tag: '@ui' }, () => {
+    test("REQ-008 the admin sees a regular user's new expense in the list", { tag: '@regression' }, async ({
+      page,
+      userApiContext,
+      createExpense,
+    }) => {
+      const userExpense = await createExpense({}, userApiContext);
+      const expensesPage = new ExpensesPage(page);
+
+      await expensesPage.goto();
+      await expect(expensesPage.userEmail).toHaveText(env.adminEmail);
+
+      const row = expensesPage.row(userExpense.id);
+      await expect(row.getByTestId('expense-title')).toHaveText(userExpense.title);
+      await expect(row.getByTestId('expense-created-by')).toHaveText(env.userEmail);
+    });
+  });
+
   test.describe('API', { tag: '@api' }, () => {
     test("REQ-008 a regular user's list filtered by category leaves out another user's expense", { tag: '@regression' }, async ({
       userApiContext,
       createExpense,
     }) => {
-      test.fail(true, IDOR_BUG);
       const own = await createExpense({ category: 'Utilities' }, userApiContext);
       const adminExpense = await createExpense({ category: 'Utilities' });
 

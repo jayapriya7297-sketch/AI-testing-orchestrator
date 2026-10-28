@@ -36,8 +36,12 @@ generation).
     - 400 {error, details:[{field, message}]} for validation (import adds row)
     - 400 {error} only for invalid or oversized JSON and file-level import errors
     - 401 {error} for a missing or invalid token and for wrong login credentials
-    - 404 {error} (unknown /api routes: "Not found")
+    - 403 {error} when the admin edits or deletes another user's expense
+    - 404 {error} (unknown /api routes: "Not found"; also another user's expense for a
+      regular user)
     - 500 {error: "Internal server error"} for unhandled errors
+  - Ownership (REQ-008, users.role): a regular user reads and writes only their own
+    expenses; the admin reads all, but edits and deletes only their own
   - Categories: Food, Travel, Office, Utilities, Entertainment, Other
 - web/ (React + Vite): nginx serves on 5173 and proxies /api to the api service.
   data-testid on every input, button, row and message: rows expense-row-{id},

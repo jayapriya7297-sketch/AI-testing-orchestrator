@@ -1,4 +1,4 @@
-# REQ-002 · Priority High · Status Implemented · Linked defects BUG-002, BUG-004
+# REQ-002 · Priority High · Status Implemented · Linked defects BUG-002, BUG-004 (closed, by design)
 # User story: As a user I want to add an expense
 # Scenarios already covered by tests in tests/ are listed in review/traceability.xlsx, not here.
 
