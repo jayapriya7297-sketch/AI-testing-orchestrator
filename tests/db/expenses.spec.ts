@@ -10,10 +10,6 @@ import { expectExpenseRow, getExpenseById, getExpensesByTitles } from './db.help
 
 const EXPENSES = '/api/expenses';
 
-// Known app bug BUG-001 (docs/bugs-found.md): no ownership check on /api/expenses, so
-// another user can change or delete any expense.
-const IDOR_BUG = 'App bug BUG-001: no ownership check on /api/expenses (IDOR)';
-
 test.describe('Expenses CRUD in the database', { tag: '@db' }, () => {
   test.describe('successful writes', () => {
     test('POST stores a row matching the input, owned by the caller', { tag: '@smoke' }, async ({ apiContext, cleanup }) => {
@@ -182,27 +178,45 @@ test.describe('Expenses CRUD in the database', { tag: '@db' }, () => {
       await expectExpenseRow(await getExpenseById(created.id), created, env.adminEmail);
     });
 
-    test('PUT by another user leaves the row unchanged', async ({ userApiContext, createExpense }) => {
-      test.fail(true, IDOR_BUG);
+    test('PUT by another regular user returns 404 and leaves the row unchanged', async ({ userApiContext, createExpense }) => {
       const adminExpense = await createExpense();
 
       const res = await userApiContext.put(`${EXPENSES}/${adminExpense.id}`, {
         data: validExpense({ title: 'hijacked', amount: 1 }),
       });
 
-      // Soft so the DB check below still runs and reports what the bug changed.
-      expect.soft([403, 404]).toContain(res.status());
+      // Soft so the DB check below still runs and reports what changed.
+      expect.soft(res.status()).toBe(404);
       await expectExpenseRow(await getExpenseById(adminExpense.id), adminExpense, env.adminEmail);
     });
 
-    test('DELETE by another user keeps the row', async ({ userApiContext, createExpense }) => {
-      test.fail(true, IDOR_BUG);
+    test('DELETE by another regular user returns 404 and keeps the row', async ({ userApiContext, createExpense }) => {
       const adminExpense = await createExpense();
 
       const res = await userApiContext.delete(`${EXPENSES}/${adminExpense.id}`);
 
-      expect.soft([403, 404]).toContain(res.status());
+      expect.soft(res.status()).toBe(404);
       await expectExpenseRow(await getExpenseById(adminExpense.id), adminExpense, env.adminEmail);
+    });
+
+    test("PUT by the admin on a user's expense returns 403 and leaves the row unchanged", async ({ apiContext, userApiContext, createExpense }) => {
+      const userExpense = await createExpense({}, userApiContext);
+
+      const res = await apiContext.put(`${EXPENSES}/${userExpense.id}`, {
+        data: validExpense({ title: 'changed by admin', amount: 1 }),
+      });
+
+      expect.soft(res.status()).toBe(403);
+      await expectExpenseRow(await getExpenseById(userExpense.id), userExpense, env.userEmail);
+    });
+
+    test("DELETE by the admin on a user's expense returns 403 and keeps the row", async ({ apiContext, userApiContext, createExpense }) => {
+      const userExpense = await createExpense({}, userApiContext);
+
+      const res = await apiContext.delete(`${EXPENSES}/${userExpense.id}`);
+
+      expect.soft(res.status()).toBe(403);
+      await expectExpenseRow(await getExpenseById(userExpense.id), userExpense, env.userEmail);
     });
   });
 });

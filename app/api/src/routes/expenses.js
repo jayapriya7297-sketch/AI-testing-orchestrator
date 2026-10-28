@@ -32,21 +32,47 @@ function validationError(res, details) {
   return res.status(400).json({ error: 'Validation failed', details });
 }
 
-async function listExpenses(category) {
+// Ownership (REQ-008, BUG-001): a regular user reads and writes only their own
+// expenses (404 otherwise); the admin reads every expense but edits and deletes
+// only their own (403 for another user's).
+const isAdmin = (user) => user.role === 'admin';
+
+async function listExpenses(user, category) {
   const params = [];
-  let sql = SELECT_EXPENSES;
+  const where = [];
+  if (!isAdmin(user)) {
+    params.push(user.id);
+    where.push(`e.created_by = $${params.length}`);
+  }
   if (category) {
     params.push(category);
-    sql += ' WHERE e.category = $1';
+    where.push(`e.category = $${params.length}`);
   }
+  let sql = SELECT_EXPENSES;
+  if (where.length) sql += ` WHERE ${where.join(' AND ')}`;
   sql += ' ORDER BY e.date DESC, e.id DESC';
   const { rows } = await pool.query(sql, params);
   return rows;
 }
 
-async function findExpense(id) {
-  const { rows } = await pool.query(`${SELECT_EXPENSES} WHERE e.id = $1`, [id]);
+async function findExpense(id, user) {
+  const { rows } = isAdmin(user)
+    ? await pool.query(`${SELECT_EXPENSES} WHERE e.id = $1`, [id])
+    : await pool.query(`${SELECT_EXPENSES} WHERE e.id = $1 AND e.created_by = $2`, [id, user.id]);
   return rows[0] || null;
+}
+
+// Sends 404 or 403 and returns false when the user may not edit or delete expense id.
+async function checkWriteAccess(id, user, res) {
+  const { rows } = await pool.query('SELECT created_by FROM expenses WHERE id = $1', [id]);
+  const owned = rows.length > 0 && rows[0].created_by === Number(user.id);
+  if (owned) return true;
+  if (rows.length && isAdmin(user)) {
+    res.status(403).json({ error: 'You can only edit or delete your own expenses' });
+  } else {
+    res.status(404).json({ error: 'Expense not found' });
+  }
+  return false;
 }
 
 function categoryFilter(req, res) {
@@ -65,7 +91,7 @@ router.get('/', async (req, res, next) => {
   try {
     const filter = categoryFilter(req, res);
     if (!filter.ok) return undefined;
-    return res.json(await listExpenses(filter.category));
+    return res.json(await listExpenses(req.user, filter.category));
   } catch (err) {
     return next(err);
   }
@@ -75,7 +101,7 @@ router.get('/export', async (req, res, next) => {
   try {
     const filter = categoryFilter(req, res);
     if (!filter.ok) return undefined;
-    const expenses = await listExpenses(filter.category);
+    const expenses = await listExpenses(req.user, filter.category);
 
     const workbook = new ExcelJS.Workbook();
     const sheet = workbook.addWorksheet('Expenses');
@@ -207,7 +233,7 @@ router.get('/:id', async (req, res, next) => {
   try {
     const id = parseId(req.params.id);
     if (id === null) return validationError(res, [{ field: 'id', message: 'Id must be a positive integer' }]);
-    const expense = await findExpense(id);
+    const expense = await findExpense(id, req.user);
     if (!expense) return res.status(404).json({ error: 'Expense not found' });
     return res.json(expense);
   } catch (err) {
@@ -223,7 +249,7 @@ router.post('/', async (req, res, next) => {
       'INSERT INTO expenses (title, amount, category, date, created_by) VALUES ($1, $2, $3, $4, $5) RETURNING id',
       [value.title, value.amount, value.category, value.date, req.user.id],
     );
-    return res.status(201).json(await findExpense(rows[0].id));
+    return res.status(201).json(await findExpense(rows[0].id, req.user));
   } catch (err) {
     return next(err);
   }
@@ -235,12 +261,13 @@ router.put('/:id', async (req, res, next) => {
     if (id === null) return validationError(res, [{ field: 'id', message: 'Id must be a positive integer' }]);
     const { errors, value } = validateExpense(req.body);
     if (errors.length) return validationError(res, errors);
+    if (!(await checkWriteAccess(id, req.user, res))) return undefined;
     const { rowCount } = await pool.query(
-      'UPDATE expenses SET title = $1, amount = $2, category = $3, date = $4 WHERE id = $5',
-      [value.title, value.amount, value.category, value.date, id],
+      'UPDATE expenses SET title = $1, amount = $2, category = $3, date = $4 WHERE id = $5 AND created_by = $6',
+      [value.title, value.amount, value.category, value.date, id, req.user.id],
     );
     if (!rowCount) return res.status(404).json({ error: 'Expense not found' });
-    return res.json(await findExpense(id));
+    return res.json(await findExpense(id, req.user));
   } catch (err) {
     return next(err);
   }
@@ -250,7 +277,11 @@ router.delete('/:id', async (req, res, next) => {
   try {
     const id = parseId(req.params.id);
     if (id === null) return validationError(res, [{ field: 'id', message: 'Id must be a positive integer' }]);
-    const { rowCount } = await pool.query('DELETE FROM expenses WHERE id = $1', [id]);
+    if (!(await checkWriteAccess(id, req.user, res))) return undefined;
+    const { rowCount } = await pool.query('DELETE FROM expenses WHERE id = $1 AND created_by = $2', [
+      id,
+      req.user.id,
+    ]);
     if (!rowCount) return res.status(404).json({ error: 'Expense not found' });
     return res.status(204).end();
   } catch (err) {

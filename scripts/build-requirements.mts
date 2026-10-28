@@ -107,12 +107,14 @@ const REQUIREMENTS: Requirement[] = [
     title: 'Data privacy',
     story: 'As a user I want only my own expenses visible',
     criteria: [
-      'The list, export and detail views show only my expenses',
-      "I cannot edit or delete another user's expense",
+      "A regular user sees only their own expenses in the list, export and detail views; another user's expense returns 404",
+      "A regular user cannot edit or delete another user's expense (404)",
+      "The admin can view every user's expenses (list, export, detail)",
+      "The admin can edit and delete only their own expenses; another user's returns 403",
     ],
     priority: 'High',
     status: 'Implemented',
-    defects: ['BUG-001'],
+    defects: ['BUG-001', 'BUG-005'],
   },
   {
     id: 'REQ-009',

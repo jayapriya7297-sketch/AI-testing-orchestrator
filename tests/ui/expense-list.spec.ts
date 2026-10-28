@@ -176,8 +176,6 @@ test.describe('expense list', () => {
     test.use({ storageState: { cookies: [], origins: [] } });
 
     test("does not show admin's expenses @ui @regression", async ({ page, createExpense }) => {
-      // App bug BUG-001 (docs/bugs-found.md): the list returns every user's expenses.
-      test.fail(true, "App bug BUG-001: the list shows every user's expenses");
       const adminExpense = await createExpense();
       const loginPage = new LoginPage(page);
 
