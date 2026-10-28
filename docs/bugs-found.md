@@ -45,15 +45,17 @@ unexpectedly passing, and the test.fail() line should be removed).
 - Test: tests/api/expenses.spec.ts ("unknown ids", beyond the integer range), 3 tests marked test.fail()
 
 ## BUG-004: Expense form has no client-side validation
+- Status: Closed (by design), 2026-10-28. REQ-002 Q1 decided client-side
+  validation is not required; server-side validation is enforced and tested.
+  Kept as an improvement idea (enhancement backlog), not a defect.
 - Screen: add/edit expense form (app/web/src/components/ExpenseForm.jsx)
 - Steps: open "Add expense" and click "Add expense" with every field empty
-- Expected: required/invalid fields flagged before submitting · Actual: the form
-  has noValidate and no checks of its own, so every message ("Title is required",
-  "Amount must be greater than 0", ...) appears only after a round trip to the API
-- Cause: validation lives only in the API (src/validate.js); the form sends whatever is typed
+- Expected (original): required/invalid fields flagged before submitting · Actual: the
+  form has noValidate, so every message appears only after a round trip to the API
+- Cause: validation lives only in the API (src/validate.js)
 - Severity: Low (UX only: the API still rejects bad input and the messages are shown)
-- Test: none pinned; tests/ui/expense-crud.spec.ts ("form validation") checks the
-  API-driven messages the form shows today
+- Test: none pinned (no requirement for it); tests/ui/expense-crud.spec.ts
+  ("form validation") checks the API-driven messages the form shows today
 
 ## BUG-005: The admin sees Edit and Delete on other users' expenses
 - Screen: expense list (app/web/src/pages/ExpensesPage.jsx)

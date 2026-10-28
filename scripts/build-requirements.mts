@@ -50,7 +50,7 @@ const REQUIREMENTS: Requirement[] = [
     ],
     priority: 'High',
     status: 'Implemented',
-    defects: ['BUG-002', 'BUG-004'],
+    defects: ['BUG-002', 'BUG-004 (closed, by design)'],
   },
   {
     id: 'REQ-003',
