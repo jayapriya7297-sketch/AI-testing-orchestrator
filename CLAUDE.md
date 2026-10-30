@@ -77,7 +77,8 @@ generation).
 - docs/bugs-found.md: app bugs found by tests (BUG-nnn), pinned with test.fail() where a
   test covers them
 - docs/examples/: sample /summarize-failures output (failure-summary-test-bug.md,
-  failure-summary-environment.md)
+  failure-summary-environment.md) and /analyze-change output for the BUG-001 fix
+  (change-impact-bug-001.md)
 
 ### Fixtures and helpers
 - fixtures/api.ts: apiContext (admin) and userApiContext (USER_EMAIL), Bearer token attached
@@ -95,6 +96,11 @@ generation).
 - npm run fixtures:files: scripts/build-fixture-files.mts rebuilds the generated upload
   files (not malformed.xlsx or expenses.csv, which are kept by hand)
 - npm run requirements:build: scripts/build-requirements.mts rebuilds requirements/expenses.xlsx
+  (both sheets; edit the Code map there, not in the xlsx)
+- npm run analyze:change -- '<range>' [-- pathspec] | --files a b: scripts/analyze-change.mts
+  matches changed files to the Code map, finds tests via traceability (else fallback specs),
+  prints risk + Playwright commands and writes reports/change-impact.md. High row → npm test;
+  unmapped file → warning, counts as Medium
 
 ### Reporting
 - npm run report:excel: reporting/build-report.mts turns reports/results.json into
@@ -118,7 +124,8 @@ generation).
 
 ### Requirements and AI drafts
 - requirements/expenses.xlsx: REQ-001..010 (story, acceptance criteria, priority,
-  status, linked defects)
+  status, linked defects); sheet "Code map": code path glob | requirement IDs (or ALL) |
+  risk | fallback specs | notes. Shared code (auth, db, middleware, harness) is High
 - review/: AI-generated drafts only; a human moves approved specs to tests/
   - review/features/<ID>.feature (Gherkin), review/specs/<ID>.spec.ts,
     review/questions/<ID>.md (open questions), review/traceability.xlsx
@@ -133,6 +140,8 @@ generation).
 - /generate-tests: requirements → Gherkin + Playwright drafts in review/
 - /summarize-failures: classify failed tests (app / test / environment) into
   reports/failure-summary.md; never changes code
+- /analyze-change: change-impact report for a branch, PR or commit range (runs
+  npm run analyze:change); never changes code
 
 ## CI (.github/workflows/ci.yml)
 - GitHub Actions, one job on ubuntu-latest: pull_request and push to main run smoke;
