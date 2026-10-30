@@ -19,7 +19,8 @@
     "report": "playwright show-report",
     "report:excel": "node reporting/build-report.mts",
     "fixtures:files": "node scripts/build-fixture-files.mts",
-    "requirements:build": "node scripts/build-requirements.mts"
+    "requirements:build": "node scripts/build-requirements.mts",
+    "analyze:change": "node scripts/analyze-change.mts"
   },
   "repository": {
     "type": "git",
