@@ -79,6 +79,9 @@ generation).
 - docs/examples/: sample /summarize-failures output (failure-summary-test-bug.md,
   failure-summary-environment.md) and /analyze-change output for the BUG-001 fix
   (change-impact-bug-001.md)
+- README.md: portfolio overview for readers (architecture, AI workflow, quick start,
+  results); keep its numbers in sync with the latest full run
+- docs/images/README.md: screenshots to capture for README.md (file names; PNGs go here)
 
 ### Fixtures and helpers
 - fixtures/api.ts: apiContext (admin) and userApiContext (USER_EMAIL), Bearer token attached
@@ -114,7 +117,7 @@ generation).
 ### CI
 - .github/workflows/ci.yml: GitHub Actions (see CI)
 - Jenkinsfile + jenkins/ (Dockerfile, Dockerfile.dockerignore, docker-compose.yml): local
-  Jenkins (see Jenkins)
+  Jenkins (see Jenkins); jenkins/README.md: start Jenkins and create the nightly job
 
 ### n8n (n8n/, see n8n/README.md)
 - workflows/test-failure-to-jira.json: importable, no credentials; placeholders in its Config node
