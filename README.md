@@ -77,8 +77,12 @@ flowchart LR
 3. **Promote.** A person reviews the drafts and moves the approved specs into `tests/`.
    The AI never writes to `tests/` or `app/` on its own.
 
-Example: REQ-002 went from drafts (`76b113d`) to drafts refined from the product owner's
-answers (`775bfef`) to tests promoted into the suite (`2ff77fa`).
+Example: REQ-002 went from drafts
+([`76b113d`](https://github.com/jayapriya7297-sketch/AI-testing-orchestrator/commit/76b113d))
+to drafts refined from the product owner's answers
+([`775bfef`](https://github.com/jayapriya7297-sketch/AI-testing-orchestrator/commit/775bfef))
+to tests promoted into the suite
+([`2ff77fa`](https://github.com/jayapriya7297-sketch/AI-testing-orchestrator/commit/2ff77fa)).
 Drafts can be run on their own with `RUN_REVIEW=1 npx playwright test --project=review`.
 
 ## Key features
